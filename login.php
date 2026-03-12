@@ -1,271 +1,382 @@
 <?php
 session_start();
-/**
- * Logika Sederhana PHP untuk menangani Form Login
- */
-$message = "";
+require_once 'koneksi.php';
 
-// koneksi database
-$dbHost = 'localhost';
-$dbUser = 'root';
-$dbPass = '';
-$dbName = 'thrift';
-
-$mysqli = new mysqli($dbHost, $dbUser, $dbPass, $dbName);
-if ($mysqli->connect_errno) {
-    die('Koneksi database gagal: ' . $mysqli->connect_error);
-}
-
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $email = trim($_POST['email'] ?? '');
-    $password = trim($_POST['password'] ?? '');
-
-    if ($email === '' || $password === '') {
-        $message = "Silakan isi email dan password.";
-    } else {
-        $stmt = $mysqli->prepare('SELECT id, password, nama, role FROM users WHERE email = ? AND status = "aktif"');
-        $stmt->bind_param('s', $email);
-        $stmt->execute();
-        $stmt->store_result();
-
-        if ($stmt->num_rows === 0) {
-            $message = "Email tidak terdaftar.";
-        } else {
-            $stmt->bind_result($dbId, $dbPassword, $name, $role);
-            $stmt->fetch();
-
-            if ($password === $dbPassword || password_verify($password, $dbPassword)) {
-                // set session
-                $_SESSION['user_id'] = $dbId;
-                $_SESSION['user_name'] = $name;
-                $_SESSION['user_email'] = $email;
-                $_SESSION['user_role'] = $role;
-
-                // jika owner, arahkan ke dashboard owner
-                if ($role === 'owner') {
-                    header('Location: owner_dashboard.php');
-                    exit;
-                }
-
-                $message = "Login berhasil untuk: " . htmlspecialchars($name);
-            } else {
-                $message = "Password salah.";
-            }
-        }
-        $stmt->close();
-    }
-}
-
-$mysqli->close();
+// Logic verifikasi login ke database akan ditaruh di sini
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Login Android - Scrollable</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thrift Solo Second - Management System</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         body {
-            background-color: #121212; /* Dark Mode Android */
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: white;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
             margin: 0;
-            font-family: 'Roboto', sans-serif;
-            overflow: hidden; /* Mengunci scroll body utama */
         }
 
-        /* Container Frame Android */
-        .android-device {
-            width: 393px;
-            height: 852px;
-            background: #FFFFFF;
-            border-radius: 40px;
+        /* Simulasi Frame Android */
+        .phone-container {
+            width: 100%;
+            max-width: 412px;
+            height: 844px;
+            background: #FDFCF0;
             position: relative;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
             overflow: hidden;
-            border: 8px solid #1a1a1a;
+            border: 12px solid #202124;
+            border-radius: 3rem;
+            box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.2);
         }
 
-        /* Status Bar Mockup (Fixed at top) */
-        .status-bar {
-            height: 44px;
-            padding: 0 24px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 14px;
-            font-weight: 500;
-            color: #000;
-            flex-shrink: 0;
-            z-index: 10;
-            background: #FFFFFF;
+        .content-area {
+            height: calc(100% - 140px);
+            overflow-y: auto;
+            padding: 24px;
+            padding-bottom: 100px;
         }
 
-        /* Scrollable Content Area */
-        .scroll-content {
-            flex: 1;
-            overflow-y: auto; /* Aktifkan scroll vertikal */
-            padding: 0 32px;
-            scrollbar-width: none; /* Sembunyikan scrollbar Firefox */
+        .content-area::-webkit-scrollbar {
+            display: none;
         }
 
-        .scroll-content::-webkit-scrollbar {
-            display: none; /* Sembunyikan scrollbar Chrome/Safari */
-        }
-
-        /* Material Input Style */
-        .material-input-group {
-            position: relative;
-            width: 100%;
-            margin-bottom: 32px;
-        }
-
-        .material-input {
-            width: 100%;
-            border: none;
-            border-bottom: 2px solid #e0e0e0;
-            padding: 12px 0;
-            font-size: 16px;
-            background: transparent;
-            transition: border-color 0.3s;
-            outline: none;
-        }
-
-        .material-input:focus {
-            border-bottom-color: #6200EE;
-        }
-
-        .material-label {
+        /* Bottom Nav Floating */
+        .bottom-nav {
             position: absolute;
-            top: 12px;
-            left: 0;
-            color: #757575;
-            pointer-events: none;
-            transition: 0.3s ease all;
-        }
-
-        .material-input:focus ~ .material-label,
-        .material-input:not(:placeholder-shown) ~ .material-label {
-            top: -12px;
-            font-size: 12px;
-            color: #6200EE;
-        }
-
-        /* Button Android Style */
-        .btn-android {
-            width: 100%;
-            background: #6200EE;
-            color: white;
-            padding: 16px;
-            border-radius: 28px;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 1.25px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: background 0.2s, box-shadow 0.2s;
-            cursor: pointer;
-            border: none;
-            margin-top: 20px;
-        }
-
-        /* Navigation Bar Mockup (Fixed at bottom) */
-        .nav-bar {
-            height: 48px;
+            bottom: 24px;
+            left: 20px;
+            right: 20px;
+            height: 72px;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(12px);
+            border: 1px solid #F1F3F4;
+            border-radius: 2rem;
             display: flex;
             justify-content: space-around;
             align-items: center;
-            padding-bottom: 8px;
-            flex-shrink: 0;
-            background: #FFFFFF;
-            border-top: 1px solid #f0f0f0;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+            z-index: 50;
         }
 
-        @media (max-width: 400px) {
-            .android-device {
-                width: 100vw;
-                height: 100vh;
-                border-radius: 0;
-                border: none;
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #BDC1C6;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .nav-item.active {
+            color: #1A73E8;
+        }
+
+        .nav-item.active .icon-bg {
+            background-color: #E8F0FE;
+            border-radius: 12px;
+            padding: 6px 12px;
+        }
+
+        .nav-item span {
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-top: 4px;
+            letter-spacing: 0.05em;
+        }
+
+        /* Status Bar Simulation */
+        .status-bar {
+            height: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 30px 0;
+            font-size: 13px;
+            font-weight: 700;
+            color: #202124;
+        }
+
+        /* Animations */
+        .page-transition {
+            animation: slideUp 0.4s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
             }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Modal Custom */
+        #modal-overlay {
+            background: rgba(32, 33, 36, 0.4);
+            backdrop-filter: blur(4px);
         }
     </style>
 </head>
+
 <body>
 
-    <div class="android-device">
-        <!-- Status Bar -->
-        <div class="status-bar">
-            <span>09:41</span>
-            <div class="flex gap-2">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20.67L2 10.67a10 10 0 1120 0l-10 10z"/></svg>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z"/></svg>
+    <div class="phone-container" id="app">
+        <!-- Login Screen -->
+        <div id="login-page" class="h-full flex flex-col justify-center px-10">
+            <div class="text-center mb-10">
+                <div class="w-20 h-20 bg-[#1A73E8] rounded-[2rem] mx-auto flex items-center justify-center mb-6 shadow-xl shadow-blue-100">
+                    <i data-lucide="shopping-bag" class="text-white w-10 h-10"></i>
+                </div>
+                <h1 class="text-3xl font-bold text-[#202124]">Solo Second</h1>
+                <p class="text-[#5F6368] text-sm mt-1">Management System</p>
             </div>
-        </div>
-
-        <!-- Scrollable Content -->
-        <div class="scroll-content">
-            <!-- Header Section -->
-            <div class="mt-12 mb-10">
-                <div class="w-16 h-16 bg-purple-100 rounded-2xl flex items-center justify-center mb-6">
-                    <svg class="text-purple-700 w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4"></path>
-                    </svg>
+            <form id="login-form" class="space-y-4">
+                <div class="relative">
+                    <i data-lucide="user" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#5F6368]"></i>
+                    <input type="text" id="username" placeholder="Username (owner/crew)" class="w-full pl-12 pr-6 py-4 bg-[#F1F3F4] rounded-2xl outline-none focus:ring-2 ring-[#1A73E8] font-medium" required>
                 </div>
-                <h1 class="text-4xl font-bold text-gray-900 tracking-tight">Login</h1>
-                <p class="text-gray-500 mt-2 text-lg">Gunakan akun Google Anda</p>
-            </div>
-
-            <?php if ($message): ?>
-                <div class="p-4 mb-6 text-sm text-purple-700 bg-purple-50 rounded-xl border border-purple-100">
-                    <?php echo $message; ?>
+                <div class="relative">
+                    <i data-lucide="lock" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#5F6368]"></i>
+                    <input type="password" id="password" placeholder="Password" class="w-full pl-12 pr-6 py-4 bg-[#F1F3F4] rounded-2xl outline-none focus:ring-2 ring-[#1A73E8] font-medium" required>
                 </div>
-            <?php endif; ?>
-
-            <!-- Form -->
-            <form action="" method="POST" class="w-full pb-10">
-                <div class="material-input-group">
-                    <input type="email" name="email" class="material-input" placeholder=" " required>
-                    <label class="material-label">Email atau ponsel</label>
-                </div>
-
-                <div class="material-input-group">
-                    <input type="password" name="password" class="material-input" placeholder=" " required>
-                    <label class="material-label">Masukkan sandi</label>
-                </div>
-
-                <div class="mt-4 mb-8">
-                    <a href="forgot.php" class="text-purple-700 font-medium text-sm">Lupa email?</a>
-                </div>
-
-                <!-- Konten Tambahan untuk mendemonstrasikan scroll jika perlu -->
-                <div class="text-xs text-gray-400 leading-relaxed mb-8">
-                    Dengan melanjutkan, Anda menyetujui Ketentuan Layanan kami. Pelajari bagaimana kami memproses data Anda di Kebijakan Privasi kami. Google akan membagikan nama, alamat email, preferensi bahasa, dan gambar profil Anda dengan aplikasi ini.
-                </div>
-
-                <div class="flex flex-col gap-2">
-                    <button type="submit" class="btn-android">
-                        Berikutnya
-                    </button>
-                    <button type="button" class="w-full py-4 text-purple-700 font-medium">
-                        Buat akun
-                    </button>
-                </div>
+                <button type="submit" class="w-full bg-[#1A73E8] text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-100 active:scale-95 transition-all">Masuk</button>
             </form>
         </div>
 
-        <!-- Android Navigation Bar Mockup -->
-        <div class="nav-bar">
-            <div class="w-4 h-4 border-2 border-gray-400 rotate-45" style="border-top:none; border-right:none;"></div>
-            <div class="w-4 h-4 border-2 border-gray-400 rounded-full"></div>
-            <div class="w-4 h-4 border-2 border-gray-400 rounded-sm"></div>
+        <!-- Main App Layout (Hidden Initially) -->
+        <div id="main-layout" class="h-full hidden">
+            <div class="status-bar">
+                <span>10:45</span>
+                <div class="flex gap-2">
+                    <i data-lucide="signal" class="w-4 h-4"></i>
+                    <i data-lucide="battery" class="w-4 h-4"></i>
+                </div>
+            </div>
+
+            <div class="content-area" id="content-container">
+                <!-- Content will be injected here via JS -->
+            </div>
+
+            <nav class="bottom-nav">
+                <div class="nav-item active" onclick="navigate('home')">
+                    <div class="icon-bg"><i data-lucide="layout-dashboard" class="w-6 h-6"></i></div>
+                    <span>Home</span>
+                </div>
+                <div class="nav-item" onclick="navigate('stok')">
+                    <div class="icon-bg"><i data-lucide="package" class="w-6 h-6"></i></div>
+                    <span>Stok</span>
+                </div>
+                <div class="nav-item" onclick="navigate('transaksi')">
+                    <div class="icon-bg"><i data-lucide="shopping-cart" class="w-6 h-6"></i></div>
+                    <span>Trans</span>
+                </div>
+                <div class="nav-item" onclick="navigate('user')">
+                    <div class="icon-bg"><i data-lucide="users" class="w-6 h-6"></i></div>
+                    <span>User</span>
+                </div>
+            </nav>
+
+            <!-- Floating Action Button -->
+            <button id="fab" class="hidden absolute bottom-28 right-8 w-14 h-14 bg-[#1A73E8] text-white rounded-2xl flex items-center justify-center shadow-2xl border-4 border-white active:scale-90 transition-all z-40" onclick="openModal()">
+                <i data-lucide="plus" class="w-8 h-8"></i>
+            </button>
+        </div>
+
+        <!-- Modal Form -->
+        <div id="modal-overlay" class="hidden absolute inset-0 z-[100] flex items-end">
+            <div class="w-full bg-white rounded-t-[3rem] p-8 page-transition shadow-2xl">
+                <div class="w-12 h-1.5 bg-[#F1F3F4] rounded-full mx-auto mb-6"></div>
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold text-[#202124]">Input Data Baru</h3>
+                    <button onclick="closeModal()" class="p-2 bg-[#F8F9FA] rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button>
+                </div>
+                <div class="space-y-4">
+                    <input type="text" id="item-name" placeholder="Nama Produk / Staff" class="w-full p-4 bg-[#F1F3F4] rounded-2xl outline-none font-medium">
+                    <div class="grid grid-cols-2 gap-3">
+                        <input type="text" id="item-cat" placeholder="Kategori" class="p-4 bg-[#F1F3F4] rounded-2xl outline-none font-medium">
+                        <input type="number" id="item-stock" placeholder="Jumlah" class="p-4 bg-[#F1F3F4] rounded-2xl outline-none font-medium">
+                    </div>
+                    <button onclick="saveData()" class="w-full bg-[#1A73E8] text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-50 mt-4">Simpan Data</button>
+                </div>
+                <div class="h-8"></div>
+            </div>
         </div>
     </div>
 
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // App State
+        let currentUser = null;
+        let products = JSON.parse(localStorage.getItem('thrift_products')) || [{
+                id: 'TFT-01',
+                name: 'Crewneck Vintage',
+                cat: 'Atasan',
+                stock: 12,
+                price: '150k'
+            },
+            {
+                id: 'TFT-02',
+                name: 'Denim Pants Levis',
+                cat: 'Bawahan',
+                stock: 4,
+                price: '250k'
+            }
+        ];
+
+        // Login Logic
+        document.getElementById('login-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const user = document.getElementById('username').value.toLowerCase();
+            if (['owner', 'crew', 'creator'].includes(user)) {
+                currentUser = user;
+                document.getElementById('login-page').classList.add('hidden');
+                document.getElementById('main-layout').classList.remove('hidden');
+                navigate('home');
+            } else {
+                alert('Gunakan username: owner, crew, atau creator');
+            }
+        });
+
+        // Navigation Logic
+        function navigate(page) {
+            const container = document.getElementById('content-container');
+            const fab = document.getElementById('fab');
+
+            // Update Nav UI
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+                if (item.innerText.toLowerCase().includes(page.slice(0, 3))) item.classList.add('active');
+            });
+
+            // Show/Hide FAB
+            if (page === 'stok' || page === 'user') fab.classList.remove('hidden');
+            else fab.classList.add('hidden');
+
+            // Render Page
+            let html = `<div class="page-transition">`;
+
+            if (page === 'home') {
+                html += `
+                <div class="flex justify-between items-center mb-8">
+                    <div>
+                        <h2 class="text-2xl font-bold text-[#202124]">Dashboard</h2>
+                        <p class="text-[#5F6368] text-sm">Halo, ${currentUser}!</p>
+                    </div>
+                    <div class="w-12 h-12 bg-white rounded-2xl border flex items-center justify-center"><i data-lucide="bell" class="w-5 h-5"></i></div>
+                </div>
+                <div class="bg-[#1A73E8] p-7 rounded-[2.5rem] text-white shadow-xl mb-6">
+                    <p class="text-[10px] font-bold uppercase tracking-widest opacity-80">Total Omzet Hari Ini</p>
+                    <h3 class="text-3xl font-bold mt-1">Rp 1.450.000</h3>
+                    <div class="mt-4 inline-block bg-white/20 px-3 py-1 rounded-full text-[10px] font-bold">+5% target</div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-white p-5 rounded-[2rem] border">
+                        <div class="w-10 h-10 bg-[#E8F0FE] rounded-xl flex items-center justify-center text-[#1A73E8] mb-4"><i data-lucide="shopping-cart" class="w-5 h-5"></i></div>
+                        <p class="text-[10px] font-bold text-[#5F6368] uppercase">Terjual</p>
+                        <h4 class="text-xl font-bold">24 Item</h4>
+                    </div>
+                    <div class="bg-white p-5 rounded-[2rem] border">
+                        <div class="w-10 h-10 bg-[#FEF7E0] rounded-xl flex items-center justify-center text-[#F9AB00] mb-4"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div>
+                        <p class="text-[10px] font-bold text-[#5F6368] uppercase">Stok Habis</p>
+                        <h4 class="text-xl font-bold">3 Produk</h4>
+                    </div>
+                </div>
+            `;
+            } else if (page === 'stok') {
+                html += `
+                <h2 class="text-2xl font-bold mb-6">Inventaris Barang</h2>
+                <div class="space-y-3">
+                    ${products.map(p => `
+                        <div class="bg-white p-4 rounded-3xl border flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-2xl flex items-center justify-center ${p.stock < 5 ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'}"><i data-lucide="package" class="w-6 h-6"></i></div>
+                            <div class="flex-1">
+                                <h4 class="font-bold text-sm">${p.name}</h4>
+                                <p class="text-[10px] text-gray-500 uppercase">${p.cat} • ${p.price}</p>
+                            </div>
+                            <div class="text-right"><p class="font-bold">${p.stock}</p><p class="text-[9px] text-gray-400">UNIT</p></div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            } else if (page === 'transaksi') {
+                html += `
+                <h2 class="text-2xl font-bold mb-6">Transaksi</h2>
+                <div class="bg-white p-6 rounded-[2rem] border text-center py-12">
+                    <i data-lucide="receipt" class="w-12 h-12 mx-auto text-gray-300 mb-4"></i>
+                    <p class="text-gray-500 font-medium">Belum ada transaksi hari ini</p>
+                </div>
+            `;
+            } else if (page === 'user') {
+                html += `
+                <h2 class="text-2xl font-bold mb-6">Tim & Staff</h2>
+                <div class="space-y-3">
+                    <div class="bg-white p-4 rounded-3xl border flex items-center gap-4">
+                        <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center"><i data-lucide="user" class="w-6 h-6"></i></div>
+                        <div><h4 class="font-bold">Nabiel</h4><p class="text-xs text-blue-500 font-bold uppercase">Owner</p></div>
+                    </div>
+                    <div class="bg-white p-4 rounded-3xl border flex items-center gap-4">
+                        <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center"><i data-lucide="user" class="w-6 h-6"></i></div>
+                        <div><h4 class="font-bold">Siti</h4><p class="text-xs text-green-500 font-bold uppercase">Crew / Kasir</p></div>
+                    </div>
+                </div>
+            `;
+            }
+
+            html += `</div>`;
+            container.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        // Modal Operations
+        function openModal() {
+            document.getElementById('modal-overlay').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('modal-overlay').classList.add('hidden');
+        }
+
+        function saveData() {
+            const name = document.getElementById('item-name').value;
+            const cat = document.getElementById('item-cat').value;
+            const stock = document.getElementById('item-stock').value;
+
+            if (name && stock) {
+                products.unshift({
+                    id: 'TFT-' + Math.floor(Math.random() * 100),
+                    name,
+                    cat: cat || 'Umum',
+                    stock: parseInt(stock),
+                    price: 'N/A'
+                });
+                localStorage.setItem('thrift_products', JSON.stringify(products));
+                closeModal();
+                navigate('stok');
+
+                // Clear inputs
+                document.getElementById('item-name').value = '';
+                document.getElementById('item-cat').value = '';
+                document.getElementById('item-stock').value = '';
+            }
+        }
+    </script>
+
 </body>
+
 </html>
