@@ -1,19 +1,3 @@
-<<<<<<< HEAD
-<?php
-
-$host = "localhost";
-$user = "root";
-$password = "";
-$database = "thrift";
-
-$conn = mysqli_connect($host,$user,$password,$database);
-
-if(!$conn){
-    die("Koneksi gagal: " . mysqli_connect_error());
-}
-
-?>
-=======
 <?php
 // config.php
 // Konfigurasi Database
@@ -31,4 +15,3 @@ if ($conn->connect_error) {
 }
 
 $conn->set_charset("utf8");
->>>>>>> b15c22a5a63a15d8874db042ef577a3404c8d4d0

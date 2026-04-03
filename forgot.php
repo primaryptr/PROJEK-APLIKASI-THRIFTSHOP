@@ -2,10 +2,10 @@
 session_start();
 $message = "";
 
-define('DB_HOST','localhost');
-define('DB_USER','root');
-define('DB_PASS','');
-define('DB_NAME','thrift');
+define('DB_HOST', 'localhost');
+define('DB_USER', 'root');
+define('DB_PASS', '');
+define('DB_NAME', 'thrift');
 
 // handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -61,12 +61,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 ?>
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lupa Email / Reset Password</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
+
 <body class="bg-gray-100 flex justify-center items-center h-screen">
     <div class="bg-white p-6 rounded shadow-md w-full max-w-md">
         <h2 class="text-2xl font-bold mb-4">Lupa Email / Reset Password</h2>
@@ -104,4 +106,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <p class="mt-4 text-sm"><a href="login.php" class="text-blue-500">Kembali ke login</a></p>
     </div>
 </body>
+
 </html>

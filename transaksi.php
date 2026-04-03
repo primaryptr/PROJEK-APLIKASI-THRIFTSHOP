@@ -8,20 +8,22 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] != 'crew') {
     exit();
 }
 
+$success = false;
+$errorMsg = '';
+
+// Load data barang untuk JS autocalculate
 $productsData = [];
+$mapToDbId = [];
+
 $query = "SELECT * FROM barang ORDER BY id_barang DESC";
 $result = mysqli_query($conn, $query);
 
 if ($result) {
     while ($row = mysqli_fetch_assoc($result)) {
-        // Konversi tipe (dari database bisa 'brand'/'nonbrand' jadi 'Brand'/'Non-Brand')
         $tipe = strtolower($row['tipe']);
         if ($tipe == 'brand') {
-            $typeFormatted = 'Brand';
             $kode_tipe = 'B';
         } else {
-            // Asumsi apapun selain brand adalah Non-Brand
-            $typeFormatted = 'Non-Brand';
             $kode_tipe = 'NB';
         }
 
@@ -42,14 +44,58 @@ if ($result) {
         $kode_kat = isset($kategori_kodes[$kat]) ? $kategori_kodes[$kat] : 'BRG';
         $kode_sku = $kode_tipe . '-' . $kode_kat . '-' . str_pad($row['id_barang'], 3, '0', STR_PAD_LEFT);
 
+        $cleanSku = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($kode_sku));
+
         $productsData[] = [
-            'id' => $kode_sku,
+            'sku' => $kode_sku,
+            'cleanSku' => $cleanSku,
             'title' => strtoupper($row['nama_barang']),
-            'price' => 'Rp.' . number_format($row['harga'], 0, ',', '.'),
+            'price' => (int)$row['harga'],
             'stock' => (int)$row['stok'],
-            'category' => $kat,
-            'type' => $typeFormatted
+            'db_id' => $row['id_barang']
         ];
+        $mapToDbId[$cleanSku] = $row;
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $kode_input = $_POST['kode_barang'];
+    $qty = (int)$_POST['qty'];
+
+    $clean_input = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($kode_input));
+
+    if (isset($mapToDbId[$clean_input])) {
+        $barang = $mapToDbId[$clean_input];
+        if ($barang['stok'] >= $qty) {
+            $id_barang = $barang['id_barang'];
+            $total_harga = $barang['harga'] * $qty;
+
+            // Insert transaksi
+            $stmt = $conn->prepare("INSERT INTO transaksi (id_barang, qty, total_harga) VALUES (?, ?, ?)");
+            $stmt->bind_param("iii", $id_barang, $qty, $total_harga);
+            if ($stmt->execute()) {
+                // Update stok
+                $new_stok = $barang['stok'] - $qty;
+                $stmt2 = $conn->prepare("UPDATE barang SET stok = ? WHERE id_barang = ?");
+                $stmt2->bind_param("ii", $new_stok, $id_barang);
+                if ($stmt2->execute()) {
+                    $success = true;
+                    // Update fresh data js
+                    $mapToDbId[$clean_input]['stok'] = $new_stok;
+                    foreach ($productsData as &$pd) {
+                        if ($pd['cleanSku'] == $clean_input) {
+                            $pd['stock'] = $new_stok;
+                        }
+                    }
+                }
+            } else {
+                $errorMsg = 'Gagal menyimpan transaksi!';
+            }
+        } else {
+            $errorMsg = 'Stok tidak mencukupi untuk jumlah transaksi ini!';
+        }
+    } else {
+        $errorMsg = 'Kode barang tidak ditemukan di sistem!';
     }
 }
 ?>
@@ -59,7 +105,7 @@ if ($result) {
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Solo Second Thrift - Stok Crew</title>
+    <title>Solo Second Thrift - Transaksi</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <style>
         :root {
@@ -78,7 +124,6 @@ if ($result) {
             padding: 0;
         }
 
-        /* ===== PAGE BACKGROUND ===== */
         body {
             background: #12121f;
             background-image:
@@ -93,7 +138,6 @@ if ($result) {
             font-family: 'Plus Jakarta Sans', sans-serif;
         }
 
-        /* ===== ANDROID FRAME ===== */
         .android-device {
             position: relative;
             width: 393px;
@@ -108,7 +152,6 @@ if ($result) {
                 inset 0 2px 0 rgba(255, 255, 255, 0.1);
         }
 
-        /* Physical buttons */
         .btn-power {
             position: absolute;
             right: -5px;
@@ -139,7 +182,6 @@ if ($result) {
             border-radius: 4px 0 0 4px;
         }
 
-        /* ===== SCREEN BEZEL ===== */
         .screen-bezel {
             background: #000;
             border-radius: 42px;
@@ -150,7 +192,6 @@ if ($result) {
             position: relative;
         }
 
-        /* ===== 1. STATUS BAR ===== */
         .status-bar {
             flex-shrink: 0;
             background: #000;
@@ -192,7 +233,6 @@ if ($result) {
             height: 13px;
         }
 
-        /* ===== 2. TOPBAR ===== */
         .topbar {
             flex-shrink: 0;
             background: var(--bg);
@@ -261,7 +301,6 @@ if ($result) {
             fill: none;
         }
 
-        /* ===== 3. APP SCREEN ===== */
         .app-screen {
             flex: 1;
             background: var(--bg);
@@ -275,255 +314,165 @@ if ($result) {
             display: none;
         }
 
-        /* ===== STOK TABS (TOGGLE) ===== */
-        .title-stok {
+        .page-title {
             text-align: center;
-            font-size: 16px;
+            font-size: 20px;
             font-weight: 800;
             color: var(--charcoal);
-            margin: 16px 0 10px;
+            margin: 16px 0 20px;
             letter-spacing: 0.5px;
             text-transform: uppercase;
+            text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.1);
         }
 
-        .stok-tabs {
-            display: flex;
-            padding: 0 16px 16px;
-            justify-content: center;
-        }
-
-        .tab-group {
-            display: flex;
-            width: 100%;
-            border: 2px solid var(--charcoal);
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 2px 2px 0 var(--charcoal);
-        }
-
-        .btn-tab {
-            flex: 1;
-            padding: 10px 0;
-            font-size: 12px;
-            font-weight: 800;
-            cursor: pointer;
-            border: none;
+        .transaksi-card {
             background: white;
+            margin: 0 16px 40px;
+            border-radius: 20px;
+            padding: 20px 16px;
+            box-shadow: 4px 4px 0px var(--charcoal);
+            border: 2px solid var(--charcoal);
+        }
+
+        .form-group {
+            padding: 0 0 16px;
+        }
+
+        .form-label {
+            font-size: 11px;
+            font-weight: 800;
             color: var(--charcoal);
-            text-align: center;
+            margin-bottom: 8px;
+            display: block;
+            text-transform: uppercase;
+            opacity: 0.7;
         }
 
-        .btn-tab.active {
-            background: var(--green);
-            color: white;
-            border-right: 2px solid var(--charcoal);
-        }
-
-        .btn-tab:not(.active) {
-            border-left: 2px solid var(--charcoal);
-            margin-left: -2px;
-            /* Overlap border untuk tab non-active */
-        }
-
-        /* ===== SEARCH BAR ===== */
-        .search-container {
-            padding: 0 16px 12px;
-        }
-
-        .search-box {
-            display: flex;
-            align-items: center;
+        .form-input {
+            width: 100%;
             background: white;
             border: 2px solid var(--charcoal);
             border-radius: 14px;
-            padding: 10px 14px;
-            gap: 10px;
-            box-shadow: 3px 3px 0 var(--charcoal);
-        }
-
-        .search-box svg {
-            width: 18px;
-            height: 18px;
-            stroke: var(--charcoal);
-            stroke-width: 2.5;
-            fill: none;
-        }
-
-        .search-box input {
-            flex: 1;
-            border: none;
-            outline: none;
+            padding: 12px 14px;
             font-family: inherit;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 700;
             color: var(--charcoal);
-            background: transparent;
+            box-shadow: 3px 3px 0 var(--charcoal);
+            outline: none;
+            transition: 0.2s;
         }
 
-        .search-box input::placeholder {
+        .form-input:focus {
+            background: #F8F9FA;
+            box-shadow: 1px 1px 0 var(--charcoal);
+            transform: translate(2px, 2px);
+        }
+
+        .form-input::placeholder {
             color: var(--charcoal);
             opacity: 0.4;
+            font-weight: 600;
         }
 
-        /* ===== FILTER CHIPS ===== */
-        .filter-container {
-            padding: 0 16px 16px;
-            display: flex;
-            gap: 8px;
-            overflow-x: auto;
-            scrollbar-width: none;
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
         }
 
-        .filter-container::-webkit-scrollbar {
-            display: none;
+        input[type=number] {
+            -moz-appearance: textfield;
         }
 
-        .filter-chip {
-            background: var(--gold);
-            color: var(--charcoal);
-            font-size: 9px;
-            font-weight: 800;
-            padding: 6px 12px;
-            border-radius: 12px;
-            border: 2px solid var(--charcoal);
-            box-shadow: 2px 2px 0 var(--charcoal);
-            cursor: pointer;
-            white-space: nowrap;
-        }
-
-        /* ===== PRODUCT LIST ===== */
-        .product-list {
-            padding: 0 16px 80px;
-            /* space for FAB */
+        .totals-section {
+            margin-top: 10px;
+            padding-top: 16px;
+            border-top: 2px dashed rgba(38, 70, 83, 0.2);
             display: flex;
             flex-direction: column;
-            gap: 14px;
-        }
-
-        .product-card {
-            background: white;
-            border: 2px solid var(--charcoal);
-            border-radius: 20px;
-            padding: 14px;
-            display: flex;
-            align-items: center;
             gap: 12px;
-            box-shadow: 4px 4px 0 var(--charcoal);
         }
 
-        .product-img {
-            width: 45px;
-            height: 45px;
-            background: #6C757D;
-            border: 2px solid var(--charcoal);
-            border-radius: 10px;
-            flex-shrink: 0;
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .product-info {
-            flex: 1;
-            min-width: 0;
+        .totals-row {
             display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .product-title {
+            justify-content: space-between;
+            align-items: center;
             font-size: 11px;
-            font-weight: 800;
+            font-weight: 600;
             color: var(--charcoal);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            opacity: 0.8;
+        }
+
+        .totals-row.total-bayar {
+            font-size: 15px;
+            font-weight: 800;
             text-transform: uppercase;
+            opacity: 1;
         }
 
-        .product-meta {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .product-price-stock {
-            color: var(--green);
-            font-size: 10px;
-            font-weight: 800;
-        }
-
-        .product-id-badge {
-            border: 1.5px solid var(--charcoal);
-            border-radius: 4px;
-            padding: 2px 6px;
-            font-size: 8px;
-            font-weight: 800;
-            color: var(--charcoal);
-            background: white;
-            letter-spacing: 0.5px;
-        }
-
-        .product-actions {
-            display: flex;
-            gap: 10px;
-            flex-shrink: 0;
-            align-items: center;
-            margin-right: 4px;
-        }
-
-        .product-actions svg {
-            width: 24px;
-            height: 24px;
-            cursor: pointer;
-            transition: transform 0.1s;
-        }
-
-        .product-actions svg:active {
-            transform: scale(0.9);
-        }
-
-        .icon-trash {
-            stroke: var(--red);
-            stroke-width: 2;
-            fill: none;
-        }
-
-        .icon-edit {
-            stroke: var(--red);
-            stroke-width: 2;
-            fill: none;
-        }
-
-        /* ===== FAB TRANSAKSI MODIFIED ===== */
-        .fab-container {
-            position: absolute;
-            bottom: 110px;
-            /* Nilai nav-h(70px) + home-indicator(26px) + margin(14px) */
-            right: 20px;
-            z-index: 50;
-        }
-
-        .btn-tambah-fab {
+        .btn-submit {
             background: var(--green);
             color: white;
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 800;
-            padding: 12px 20px;
-            border-radius: 12px;
+            letter-spacing: 0.5px;
+            padding: 14px;
+            border-radius: 14px;
             border: 2px solid var(--charcoal);
             box-shadow: 3px 3px 0 var(--charcoal);
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 6px;
+            width: 100%;
+            margin: 24px 0 0;
             transition: transform 0.1s, box-shadow 0.1s;
+            display: block;
         }
 
-        .btn-tambah-fab:active {
+        .btn-submit:active {
             transform: translate(2px, 2px);
             box-shadow: 1px 1px 0 var(--charcoal);
         }
 
-        /* ===== 4. BOTTOM NAV ===== */
+        .notification {
+            position: absolute;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--green);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 14px;
+            border: 2px solid var(--charcoal);
+            box-shadow: 4px 4px 0 var(--charcoal);
+            font-weight: 800;
+            font-size: 12px;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            animation: slideDown 0.5s ease out, fadeOut 0.5s ease 2.5s forwards;
+            pointer-events: none;
+        }
+
+        @keyframes slideDown {
+            from {
+                top: 80px;
+                opacity: 0;
+            }
+
+            to {
+                top: 100px;
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeOut {
+            to {
+                opacity: 0;
+                visibility: hidden;
+            }
+        }
+
         .bottom-nav {
             flex-shrink: 0;
             height: var(--nav-h);
@@ -604,7 +553,10 @@ if ($result) {
             stroke-width: 2.2;
         }
 
-        /* ===== 5. HOME INDICATOR ===== */
+        .nav-fab.active {
+            box-shadow: 0 0 10px var(--red);
+        }
+
         .home-indicator {
             flex-shrink: 0;
             background: #000;
@@ -621,7 +573,6 @@ if ($result) {
             border-radius: 3px;
         }
 
-        /* ===== LABEL ===== */
         .device-label {
             margin-top: 18px;
             color: rgba(255, 255, 255, 0.22);
@@ -629,21 +580,34 @@ if ($result) {
             letter-spacing: 2.5px;
             text-transform: uppercase;
         }
+
+        .back-btn {
+            background: none;
+            border: none;
+            padding: 0;
+            margin-right: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .back-btn svg {
+            width: 20px;
+            height: 20px;
+            stroke: var(--charcoal);
+            stroke-width: 2.5;
+        }
     </style>
 </head>
 
 <body>
-
     <div class="android-device">
-
-        <!-- Physical Buttons -->
         <div class="btn-power"></div>
         <div class="btn-vol-up"></div>
         <div class="btn-vol-down"></div>
-
         <div class="screen-bezel">
 
-            <!-- ① STATUS BAR -->
             <div class="status-bar">
                 <div class="punch-hole"></div>
                 <span class="status-time">09:41</span>
@@ -668,7 +632,6 @@ if ($result) {
                 </div>
             </div>
 
-            <!-- ② TOPBAR -->
             <div class="topbar">
                 <div class="brand">
                     <div class="brand-logo">S²</div>
@@ -677,65 +640,60 @@ if ($result) {
                         <span>Crew</span>
                     </div>
                 </div>
-                <div class="topbar-icon">
-                    <svg viewBox="0 0 24 24" stroke-width="2.2">
-                        <rect x="3" y="3" width="7" height="7" rx="1.5" />
-                        <rect x="14" y="3" width="7" height="7" rx="1.5" />
-                        <rect x="3" y="14" width="7" height="7" rx="1.5" />
-                        <rect x="14" y="14" width="7" height="7" rx="1.5" />
-                    </svg>
-                </div>
             </div>
 
-            <!-- ③ APP SCREEN -->
             <div class="app-screen">
-
-                <div class="title-stok">KELOLA STOK BARANG</div>
-
-                <div class="stok-tabs">
-                    <div class="tab-group">
-                        <button class="btn-tab active">Brand</button>
-                        <button class="btn-tab">Non-Brand</button>
-                    </div>
-                </div>
-
-                <div class="search-container">
-                    <div class="search-box">
-                        <svg viewBox="0 0 24 24">
-                            <circle cx="11" cy="11" r="8" />
-                            <path d="M21 21l-4.35-4.35" stroke-linecap="round" />
+                <?php if ($success): ?>
+                    <div class="notification">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
-                        <input type="text" id="search-input" placeholder="CARI BARANG / RAK..." />
+                        Transaksi tersimpan!
                     </div>
+                <?php endif; ?>
+                <?php if (!empty($errorMsg)): ?>
+                    <div class="notification" style="background: var(--red);">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                        <?= $errorMsg ?>
+                    </div>
+                <?php endif; ?>
+
+                <div class="page-title">PENJUALAN</div>
+                <div style="padding: 0 16px; font-weight: 800; font-size: 14px; margin-bottom: 12px; color: var(--charcoal);">Input Transaksi</div>
+
+                <div class="transaksi-card">
+                    <form method="POST">
+                        <div class="form-group">
+                            <label class="form-label">Scan/ Kode Barang</label>
+                            <input type="text" id="kode_barang" name="kode_barang" class="form-input" placeholder="Contoh : NB-KOS-012" required autocomplete="off">
+                            <div id="product-hint" style="font-size:10px; font-weight:700; color:var(--green); margin-top:6px; margin-left:4px; height:12px;"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Jumlah (Qty)</label>
+                            <input type="number" id="qty" name="qty" class="form-input" placeholder="Contoh : 1" value="1" required min="1">
+                        </div>
+
+                        <div class="totals-section">
+                            <div class="totals-row">
+                                <span>Subtotal</span>
+                                <span id="subtotal_text" style="color: var(--charcoal); font-weight: 800;">Rp. 0</span>
+                            </div>
+                            <div class="totals-row total-bayar">
+                                <span>TOTAL BAYAR</span>
+                                <span id="total_bayar_text" style="color: var(--red);">Rp. 0</span>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-submit">SIMPAN & CETAK NOTA</button>
+                    </form>
                 </div>
 
-                <div class="filter-container" id="filter-container">
-                    <button class="filter-chip active" data-filter="SEMUA">SEMUA</button>
-                    <button class="filter-chip" data-filter="KAOS/POLO">KAOS/POLO</button>
-                    <button class="filter-chip" data-filter="KEMEJA/FLANEL">KEMEJA/FLANEL</button>
-                    <button class="filter-chip" data-filter="HOODIE/CN">HOODIE/CN</button>
-                    <button class="filter-chip" data-filter="JAKET/AIRISM">JAKET/AIRISM</button>
-                    <button class="filter-chip" data-filter="JAS/BLAZER">JAS/BLAZER</button>
-                    <button class="filter-chip" data-filter="RAJUT/CROP">RAJUT/CROP</button>
-                    <button class="filter-chip" data-filter="CHINOS">CHINOS</button>
-                    <button class="filter-chip" data-filter="JEANS">JEANS</button>
-                    <button class="filter-chip" data-filter="CELANA PENDEK">CELANA PENDEK</button>
-                    <button class="filter-chip" data-filter="TRAINING">TRAINING</button>
-                    <button class="filter-chip" data-filter="CELANA KANTOR">CELANA KANTOR</button>
-                </div>
+            </div><!-- /app-screen -->
 
-                <div class="product-list" id="product-list-container">
-                    <!-- Products will be injected by JavaScript -->
-                </div>
-
-            </div><!-- /app-screen ③ -->
-
-            <!-- Floating Added Tag Button ditaruh di luar scroll -->
-            <div class="fab-container">
-                <button class="btn-tambah-fab" onclick="window.location.href='tambah_stok_crew.php'">+ Tambah</button>
-            </div>
-
-            <!-- ④ BOTTOM NAV -->
             <nav class="bottom-nav">
                 <a href="dasboard_crew.php" class="nav-item">
                     <svg viewBox="0 0 24 24">
@@ -746,13 +704,14 @@ if ($result) {
                     </svg>
                     <span>Dashboard</span>
                 </a>
-                <a href="stok_crew.php" class="nav-item active">
+                <a href="stok_crew.php" class="nav-item">
                     <svg viewBox="0 0 24 24">
                         <path d="M5 8h14M5 12h14M5 16h14" stroke-linecap="round" />
                     </svg>
                     <span>Stok</span>
                 </a>
-                <div class="nav-fab" onclick="window.location='transaksi.php'">
+                <!-- Middle Fab di Transaksi -->
+                <div class="nav-fab active" onclick="window.location='transaksi.php'" style="background:var(--red);">
                     <svg viewBox="0 0 24 24">
                         <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke-linecap="round" stroke-linejoin="round" />
                         <path d="M3 6h18M16 10a4 4 0 01-8 0" stroke-linecap="round" stroke-linejoin="round" />
@@ -773,114 +732,66 @@ if ($result) {
                 </a>
             </nav>
 
-            <!-- ⑤ HOME INDICATOR -->
             <div class="home-indicator">
                 <div class="home-bar"></div>
             </div>
-
-        </div><!-- /screen-bezel -->
-    </div><!-- /android-device -->
-
+        </div>
+    </div>
     <div class="device-label">Solo Second Thrift &middot; Android Preview</div>
 
     <script>
-        // Data dari Database (di-inject via PHP)
         const dbProducts = <?php echo json_encode($productsData); ?>;
 
-        let activeCategory = 'SEMUA';
-        let activeType = 'Brand';
-        let searchTerm = '';
+        const inputKode = document.getElementById('kode_barang');
+        const inputQty = document.getElementById('qty');
+        const textSubtotal = document.getElementById('subtotal_text');
+        const textTotal = document.getElementById('total_bayar_text');
+        const textHint = document.getElementById('product-hint');
 
-        // Render Function
-        function renderProducts() {
-            const container = document.getElementById('product-list-container');
-            container.innerHTML = '';
+        function formatRupiah(angka) {
+            return 'Rp. ' + angka.toLocaleString('id-ID');
+        }
 
-            const filtered = dbProducts.filter(p => {
-                const matchCategory = activeCategory === 'SEMUA' || p.category === activeCategory;
-                const matchType = p.type === activeType;
-                let cleanSearch = searchTerm.toLowerCase().replace(/[^a-z0-9]/g, '');
-                let cleanId = p.id.toLowerCase().replace(/[^a-z0-9]/g, '');
-                const matchSearch = searchTerm === '' ||
-                    p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    cleanId.includes(cleanSearch);
-                return matchCategory && matchType && matchSearch;
-            });
+        function calculateTotal() {
+            const rawSku = inputKode.value.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const qty = parseInt(inputQty.value) || 0;
 
-            if (filtered.length === 0) {
-                container.innerHTML = `<div style="text-align:center; padding: 20px; color:gray; font-weight:bold; font-size:12px;">TIDAK ADA BARANG DITEMUKAN</div>`;
-                return;
+            // Find product using smart search (exact SKU without dash, OR just the ID number!)
+            const product = dbProducts.find(p => p.cleanSku === rawSku || p.db_id == parseInt(rawSku));
+
+            if (product) {
+                textHint.textContent = `🛒 ${product.title} (STOK: ${product.stock})`;
+                if (qty > product.stock) {
+                    textHint.style.color = 'var(--red)';
+                    textHint.textContent += ' - STOK TIDAK CUKUP!';
+                } else {
+                    textHint.style.color = 'var(--green)';
+                }
+
+                const total = product.price * qty;
+                textSubtotal.textContent = formatRupiah(total);
+                textTotal.textContent = formatRupiah(total);
+            } else {
+                if (rawSku.length > 3) {
+                    textHint.textContent = `Kode barang tidak ditemukan!`;
+                    textHint.style.color = 'var(--red)';
+                } else {
+                    textHint.textContent = ``;
+                }
+                textSubtotal.textContent = 'Rp. 0';
+                textTotal.textContent = 'Rp. 0';
             }
-
-            filtered.forEach(p => {
-                const card = `
-                    <div class="product-card">
-                        <div class="product-img"></div>
-                        <div class="product-info">
-                            <div class="product-title">${p.title}</div>
-                            <div style="font-size: 10px; font-weight: 700; color:var(--charcoal); opacity:0.6; margin: 4px 0 2px;">${p.price}</div>
-                            <div class="product-meta">
-                                <span class="product-price-stock" style="font-size: 11px;">STOK : ${p.stock}</span>
-                                <span class="product-id-badge">ID : ${p.id}</span>
-                            </div>
-                        </div>
-                        <div class="product-actions">
-                            <svg class="icon-edit" viewBox="0 0 24 24">
-                                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke-linecap="round" stroke-linejoin="round" />
-                                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke-linecap="round" stroke-linejoin="round" />
-                            </svg>
-                        </div>
-                    </div>
-                `;
-                container.innerHTML += card;
-            });
         }
 
-        // Event Label Type (Brand/Non-Brand)
-        document.querySelectorAll('.tab-group .btn-tab').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                document.querySelectorAll('.tab-group .btn-tab').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-                activeType = e.target.innerText;
-                renderProducts();
+        inputKode.addEventListener('input', calculateTotal);
+        inputQty.addEventListener('input', calculateTotal);
+
+        // Hide popup when tapping anywhere
+        document.body.addEventListener('click', () => {
+            document.querySelectorAll('.notification').forEach(n => {
+                n.style.display = 'none';
             });
         });
-
-        // Event Label Kategori (Chips)
-        document.querySelectorAll('.filter-chip').forEach(chip => {
-            chip.addEventListener('click', (e) => {
-                // Reset styling for all chips
-                document.querySelectorAll('.filter-chip').forEach(c => {
-                    c.style.background = 'var(--gold)';
-                    c.classList.remove('active');
-                    c.style.color = 'var(--charcoal)';
-                });
-
-                // Style Active Chip
-                e.target.style.background = 'var(--charcoal)';
-                e.target.style.color = 'white';
-                e.target.classList.add('active');
-
-                activeCategory = e.target.dataset.filter;
-                renderProducts();
-            });
-        });
-
-        // Init
-        // Style 'SEMUA' chip on load
-        document.querySelector('.filter-chip[data-filter="SEMUA"]').style.background = 'var(--charcoal)';
-        document.querySelector('.filter-chip[data-filter="SEMUA"]').style.color = 'white';
-        renderProducts();
-
-        // Search Functionality
-        const searchInput = document.getElementById('search-input');
-
-        function performSearch() {
-            searchTerm = searchInput.value.trim();
-            renderProducts();
-        }
-
-        searchInput.addEventListener('keyup', performSearch);
     </script>
 </body>
 
