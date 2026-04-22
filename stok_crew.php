@@ -44,11 +44,13 @@ if ($result) {
 
         $productsData[] = [
             'id' => $kode_sku,
+            'dbId' => $row['id_barang'],
             'title' => strtoupper($row['nama_barang']),
             'price' => 'Rp.' . number_format($row['harga'], 0, ',', '.'),
             'stock' => (int)$row['stok'],
             'category' => $kat,
-            'type' => $typeFormatted
+            'type' => $typeFormatted,
+            'foto' => !empty($row['foto']) ? 'uploads/' . $row['foto'] : null
         ];
     }
 }
@@ -146,7 +148,7 @@ if ($result) {
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            height: 780px;
+            height: 850px;
             position: relative;
         }
 
@@ -415,6 +417,8 @@ if ($result) {
             width: 45px;
             height: 45px;
             background: #6C757D;
+            background-size: cover;
+            background-position: center;
             border: 2px solid var(--charcoal);
             border-radius: 10px;
             flex-shrink: 0;
@@ -524,24 +528,26 @@ if ($result) {
         }
 
         /* ===== 4. BOTTOM NAV ===== */
-        .bottom-nav {
+                .bottom-nav {
             flex-shrink: 0;
             height: var(--nav-h);
             background: var(--bg);
             border-top: 2.5px solid var(--charcoal);
             display: flex;
             align-items: center;
-            justify-content: space-around;
-            padding: 0 6px;
+            justify-content: space-between;
+            padding: 0 4px;
         }
 
         .nav-item {
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
             gap: 3px;
             cursor: pointer;
-            padding: 6px 12px;
+            flex: 1;
+            padding: 6px 0;
             border-radius: 10px;
             text-decoration: none;
             transition: background 0.15s;
@@ -573,35 +579,6 @@ if ($result) {
 
         .nav-item.active span {
             color: var(--red);
-        }
-
-        .nav-fab {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: var(--red);
-            border: 2.5px solid var(--charcoal);
-            box-shadow: 3px 3px 0 var(--charcoal);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            margin-top: -20px;
-            flex-shrink: 0;
-            transition: transform 0.15s, box-shadow 0.15s;
-        }
-
-        .nav-fab:active {
-            transform: translate(2px, 2px);
-            box-shadow: 1px 1px 0 var(--charcoal);
-        }
-
-        .nav-fab svg {
-            width: 21px;
-            height: 21px;
-            stroke: white;
-            fill: none;
-            stroke-width: 2.2;
         }
 
         /* ===== 5. HOME INDICATOR ===== */
@@ -677,14 +654,6 @@ if ($result) {
                         <span>Crew</span>
                     </div>
                 </div>
-                <div class="topbar-icon">
-                    <svg viewBox="0 0 24 24" stroke-width="2.2">
-                        <rect x="3" y="3" width="7" height="7" rx="1.5" />
-                        <rect x="14" y="3" width="7" height="7" rx="1.5" />
-                        <rect x="3" y="14" width="7" height="7" rx="1.5" />
-                        <rect x="14" y="14" width="7" height="7" rx="1.5" />
-                    </svg>
-                </div>
             </div>
 
             <!-- ③ APP SCREEN -->
@@ -736,7 +705,7 @@ if ($result) {
             </div>
 
             <!-- ④ BOTTOM NAV -->
-            <nav class="bottom-nav">
+                        <nav class="bottom-nav">
                 <a href="dasboard_crew.php" class="nav-item">
                     <svg viewBox="0 0 24 24">
                         <rect x="3" y="3" width="7" height="7" rx="1.5" />
@@ -752,19 +721,14 @@ if ($result) {
                     </svg>
                     <span>Stok</span>
                 </a>
-                <div class="nav-fab" onclick="window.location='transaksi.php'">
+                <a href="transaksi.php" class="nav-item">
                     <svg viewBox="0 0 24 24">
                         <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke-linecap="round" stroke-linejoin="round" />
                         <path d="M3 6h18M16 10a4 4 0 01-8 0" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
-                </div>
-                <a href="laporan.php" class="nav-item">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M18 20V10M12 20V4M6 20v-6" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
-                    <span>Laporan</span>
+                    <span>Transaksi</span>
                 </a>
-                <a href="profil.php" class="nav-item">
+                <a href="profil_crew.php" class="nav-item">
                     <svg viewBox="0 0 24 24">
                         <circle cx="12" cy="7" r="4" />
                         <path d="M2 21v-1a8 8 0 0116 0v1" stroke-linecap="round" />
@@ -813,9 +777,10 @@ if ($result) {
             }
 
             filtered.forEach(p => {
+                const imgStyle = p.foto ? `background-image: url("${p.foto}");` : '';
                 const card = `
                     <div class="product-card">
-                        <div class="product-img"></div>
+                        <div class="product-img" style="${imgStyle}"></div>
                         <div class="product-info">
                             <div class="product-title">${p.title}</div>
                             <div style="font-size: 10px; font-weight: 700; color:var(--charcoal); opacity:0.6; margin: 4px 0 2px;">${p.price}</div>
@@ -825,10 +790,12 @@ if ($result) {
                             </div>
                         </div>
                         <div class="product-actions">
-                            <svg class="icon-edit" viewBox="0 0 24 24">
-                                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke-linecap="round" stroke-linejoin="round" />
-                                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke-linecap="round" stroke-linejoin="round" />
-                            </svg>
+                            <a href="edit_stok_crew.php?id=${p.dbId}" style="display: flex; align-items: center; justify-content: center;">
+                                <svg class="icon-edit" viewBox="0 0 24 24">
+                                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke-linecap="round" stroke-linejoin="round" />
+                                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                            </a>
                         </div>
                     </div>
                 `;

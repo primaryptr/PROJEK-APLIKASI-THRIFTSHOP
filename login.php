@@ -17,15 +17,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['login'])) {
         // Verifikasi password (support plain text untuk development, disarankan password_verify untuk produksi)
         if (password_verify($password, $user['password']) || $password === $user['password']) {
             $_SESSION['user_id'] = $user['id'];
-            $_SESSION['role'] = $user['role'];
-            // Menyesuaikan dengan kolom nama atau name pada database
-            $_SESSION['nama'] = isset($user['nama']) ? $user['nama'] : (isset($user['name']) ? $user['name'] : 'User');
+            $_SESSION['id']      = $user['id']; // alias agar kompatibel semua halaman
+            $_SESSION['role']    = $user['role'];
+            $_SESSION['email']   = $user['email'];
+            $_SESSION['nama']    = isset($user['nama']) ? $user['nama'] : (isset($user['name']) ? $user['name'] : 'User');
 
             if ($user['role'] == 'owner') {
                 header("Location: dasboard_owner.php");
                 exit();
             } else if ($user['role'] == 'crew') {
                 header("Location: dasboard_crew.php");
+                exit();
+            } else if ($user['role'] == 'content_creator') {
+                header("Location: dasboard_creator.php");
                 exit();
             } else {
                 echo "<script>alert('Role pengguna tidak dikenali!');</script>";

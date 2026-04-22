@@ -2,31 +2,31 @@
 session_start();
 require_once 'koneksi.php';
 
-// Cek apakah user sudah login dan role adalah crew
 if (!isset($_SESSION['role']) || $_SESSION['role'] != 'crew') {
     header("Location: login.php");
     exit();
 }
 
-// Mengambil Total Semua Stok Barang
-$queryTotalStok = "SELECT SUM(stok) as total_stok FROM barang";
-$resultTotalStok = mysqli_query($conn, $queryTotalStok);
-$rowTotalStok = mysqli_fetch_assoc($resultTotalStok);
-$totalStok = $rowTotalStok['total_stok'] ?? 0;
+// Ambil data user dari database berdasarkan session
+// Gunakan user_id sesuai yang di-set login.php
+$user_id = $_SESSION['user_id'] ?? 0;
 
-// Mengambil Data Barang dengan Stok di Bawah 5
-$queryStokKritis = "SELECT * FROM barang WHERE stok < 5 ORDER BY stok ASC";
-$resultStokKritis = mysqli_query($conn, $queryStokKritis);
+// Cek apakah kolom shift sudah ada di tabel users
+$cek_shift = $conn->query("SHOW COLUMNS FROM users LIKE 'shift'");
+$ada_shift  = ($cek_shift && $cek_shift->num_rows > 0);
 
-$stok_kritis = [];
-while ($row = mysqli_fetch_assoc($resultStokKritis)) {
-    $stok_kritis[] = [
-        'nama' => strtoupper($row['nama_barang']),
-        'harga' => 'Rp.' . number_format($row['harga'], 0, ',', '.'),
-        'stok' => (int)$row['stok']
-    ];
-}
-$jumlah_stok_kritis = count($stok_kritis);
+$kolom = $ada_shift ? "nama, email, shift, status" : "nama, email, status";
+$stmt  = $conn->prepare("SELECT {$kolom} FROM users WHERE id = ?");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+$user   = $result->fetch_assoc();
+$stmt->close();
+
+$nama   = $user['nama']   ?? $_SESSION['nama'] ?? '-';
+$email  = $user['email']  ?? '-';
+$shift  = $ada_shift ? ($user['shift'] ?? null) : null;
+$status = $user['status'] ?? 'aktif';
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -34,10 +34,10 @@ $jumlah_stok_kritis = count($stok_kritis);
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Solo Second Thrift - Dashboard</title>
+    <title>Solo Second Thrift - Profil Crew</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <style>
-        :root {
+                :root {
             --bg: #FDFCF0;
             --charcoal: #264653;
             --red: #B23A48;
@@ -114,10 +114,7 @@ $jumlah_stok_kritis = count($stok_kritis);
             border-radius: 4px 0 0 4px;
         }
 
-        /* ===== SCREEN BEZEL =====
-           Flex column:
-           status-bar → topbar → app-screen (scroll) → bottom-nav → home-indicator
-        ===== */
+        /* ===== SCREEN BEZEL ===== */
         .screen-bezel {
             background: #000;
             border-radius: 42px;
@@ -127,7 +124,7 @@ $jumlah_stok_kritis = count($stok_kritis);
             height: 850px;
         }
 
-        /* ===== 1. STATUS BAR — diam ===== */
+        /* ===== 1. STATUS BAR ===== */
         .status-bar {
             flex-shrink: 0;
             background: #000;
@@ -169,7 +166,7 @@ $jumlah_stok_kritis = count($stok_kritis);
             height: 13px;
         }
 
-        /* ===== 2. TOPBAR — diam, tidak ikut scroll ===== */
+        /* ===== 2. TOPBAR ===== */
         .topbar {
             flex-shrink: 0;
             background: var(--bg);
@@ -238,7 +235,7 @@ $jumlah_stok_kritis = count($stok_kritis);
             fill: none;
         }
 
-        /* ===== 3. APP SCREEN — satu-satunya bagian yang scroll ===== */
+        /* ===== 3. APP SCREEN ===== */
         .app-screen {
             flex: 1;
             background: var(--bg);
@@ -251,276 +248,213 @@ $jumlah_stok_kritis = count($stok_kritis);
             display: none;
         }
 
-        /* ===== STATS GRID ===== */
-        .stats {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            padding: 14px 16px 0;
+        .app-screen::-webkit-scrollbar {
+            display: none;
         }
 
-        .stat-card {
-            border-radius: 14px;
-            padding: 14px 13px;
-            border: 2px solid var(--charcoal);
-            box-shadow: 3px 3px 0 var(--charcoal);
-            cursor: pointer;
-            transition: transform 0.15s, box-shadow 0.15s;
-        }
+        /* ===== PROFIL CONTENT ===== */
 
-        .stat-card:active {
-            transform: translate(2px, 2px);
-            box-shadow: 1px 1px 0 var(--charcoal);
-        }
-
-        .stat-card.gold {
-            background: var(--gold);
-        }
-
-        .stat-card.teal {
-            background: var(--green);
-        }
-
-        .stat-card.dark {
-            background: var(--charcoal);
-        }
-
-        .stat-card.red {
-            background: var(--red);
-        }
-
-        .stat-label {
-            font-size: 9px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            opacity: 0.75;
-            margin-bottom: 6px;
-        }
-
-        .stat-value {
-            font-size: 17px;
-            font-weight: 800;
-            line-height: 1.1;
-        }
-
-        .stat-card.gold .stat-label,
-        .stat-card.gold .stat-value {
-            color: var(--charcoal);
-        }
-
-        .stat-card.teal .stat-label,
-        .stat-card.teal .stat-value {
-            color: var(--bg);
-        }
-
-        .stat-card.dark .stat-label,
-        .stat-card.dark .stat-value {
-            color: var(--bg);
-        }
-
-        .stat-card.red .stat-label,
-        .stat-card.red .stat-value {
-            color: var(--bg);
-        }
-
-        /* ===== DIVIDER ===== */
-        .section-divider {
-            height: 1px;
-            background: var(--charcoal);
-            opacity: 0.1;
-            margin: 16px 16px 0;
-        }
-
-        /* ===== SECTION HEADER ===== */
-        .section-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 14px 16px 10px;
-        }
-
-        .warning-icon {
-            width: 26px;
-            height: 26px;
-            background: var(--gold);
-            border-radius: 7px;
-            font-size: 13px;
-            border: 2px solid var(--charcoal);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .section-header h2 {
-            font-size: 14px;
-            font-weight: 700;
-            color: var(--charcoal);
-        }
-
-        .badge-count {
-            margin-left: auto;
-            background: var(--red);
-            color: var(--bg);
-            font-size: 10px;
-            font-weight: 700;
-            padding: 2px 8px;
-            border-radius: 20px;
-            border: 1.5px solid var(--charcoal);
-        }
-
-        /* ===== STOCK LIST ===== */
-        .stock-list {
+        /* Avatar & nama */
+        .profile-hero {
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            padding: 0 16px 16px;
-        }
-
-        .stock-item {
-            background: white;
-            border: 2px solid var(--charcoal);
-            border-radius: 14px;
-            padding: 18px 16px;
-            display: flex;
             align-items: center;
-            gap: 10px;
-            box-shadow: 3px 3px 0 var(--charcoal);
-            animation: slideIn 0.3s ease both;
+            padding: 24px 0 20px;
         }
 
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .stock-item:nth-child(1) {
-            animation-delay: 0.05s;
-        }
-
-        .stock-item:nth-child(2) {
-            animation-delay: 0.12s;
-        }
-
-        .stock-item:nth-child(3) {
-            animation-delay: 0.19s;
-        }
-
-        .stock-item:active {
-            transform: translate(2px, 2px);
-            box-shadow: 1px 1px 0 var(--charcoal);
-        }
-
-        .item-thumb {
-            width: 46px;
-            height: 46px;
-            border-radius: 9px;
-            background: #eee;
-            border: 1.5px solid var(--charcoal);
-            flex-shrink: 0;
+        .avatar-ring {
+            width: 84px;
+            height: 84px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--red), #8b1a27);
             display: flex;
             align-items: center;
             justify-content: center;
+            box-shadow: 0 6px 20px rgba(178, 58, 72, 0.35), 0 0 0 4px rgba(178, 58, 72, 0.15);
+            margin-bottom: 14px;
         }
 
-        .item-thumb svg {
-            width: 24px;
-            height: 24px;
-            opacity: 0.3;
-            stroke: var(--red) !important;
+        .avatar-ring svg {
+            width: 42px;
+            height: 42px;
+            stroke: white;
+            fill: none;
+            stroke-width: 1.5;
+            stroke-linecap: round;
         }
 
-        .item-info {
+        .profile-name {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--charcoal);
+            letter-spacing: 0.3px;
+            margin-bottom: 4px;
+        }
+
+        .profile-role-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: var(--red);
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            padding: 4px 12px;
+            border-radius: 999px;
+        }
+
+        /* Info Card */
+        .info-card {
+            background: white;
+            border-radius: 20px;
+            padding: 6px 0;
+            box-shadow: 0 2px 12px rgba(38, 70, 83, 0.08);
+            margin-bottom: 16px;
+        }
+
+        .info-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 18px;
+            border-bottom: 1px solid #f0ede3;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            background: var(--bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .info-icon svg {
+            width: 18px;
+            height: 18px;
+            stroke: var(--charcoal);
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .info-text {
             flex: 1;
-            min-width: 0;
         }
 
-        .item-name {
-            font-size: 12px;
+        .info-label {
+            font-size: 10px;
             font-weight: 700;
             color: var(--charcoal);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .item-meta {
-            display: flex;
-            gap: 6px;
-            margin-top: 4px;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .meta-tag {
-            font-size: 9px;
-            font-weight: 600;
-            padding: 2px 6px;
-            border-radius: 5px;
-            border: 1.5px solid var(--charcoal);
+            opacity: 0.45;
             text-transform: uppercase;
-            letter-spacing: 0.4px;
+            letter-spacing: 1px;
+            margin-bottom: 2px;
         }
 
-        .meta-tag.rack {
-            background: transparent;
-            color: var(--green);
-            margin-right: auto;
-            border: none;
+        .info-value {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--charcoal);
         }
 
-        .meta-tag.stok-empty {
-            background: var(--red);
-            color: white;
-        }
-
-        .meta-tag.stok-low {
-            background: var(--red);
-            color: white;
-        }
-
-        .item-actions {
-            display: flex;
+        /* Shift badge */
+        .shift-badge {
+            display: inline-flex;
+            align-items: center;
             gap: 5px;
-            flex-shrink: 0;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
         }
 
-        .btn-qty {
-            width: 28px;
-            height: 28px;
-            border-radius: 7px;
-            border: 2px solid var(--charcoal);
+        .shift-1 {
+            background: #FFF3CD;
+            color: #856404;
+        }
+
+        .shift-2 {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .shift-default {
+            background: #f0ede3;
+            color: var(--charcoal);
+        }
+
+        /* Status badge */
+        .status-aktif {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #d4edda;
+            color: #155724;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 12px;
+            border-radius: 999px;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #28a745;
+            display: inline-block;
+        }
+
+        /* Logout button */
+        .logout-btn {
             display: flex;
             align-items: center;
             justify-content: center;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 700;
+            gap: 8px;
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, var(--red), #8b1a27);
             color: white;
-            line-height: 1;
-            transition: transform 0.1s;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            border: none;
+            border-radius: 16px;
+            cursor: pointer;
+            text-decoration: none;
+            box-shadow: 0 4px 16px rgba(178, 58, 72, 0.35);
+            transition: opacity 0.2s, transform 0.1s;
+            margin-top: 4px;
         }
 
-        .btn-qty:active {
-            transform: scale(0.9);
+        .logout-btn:active {
+            opacity: 0.85;
+            transform: scale(0.98);
         }
 
-        .btn-qty.minus {
-            background: var(--red);
+        .logout-btn svg {
+            width: 18px;
+            height: 18px;
+            stroke: white;
+            fill: none;
+            stroke-width: 2.2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
         }
 
-        .btn-qty.plus {
-            background: var(--green);
-        }
-
-        /* ===== 4. BOTTOM NAV — diam, tidak ikut scroll ===== */
+        /* BOTTOM NAV */
+                /* ===== 4. BOTTOM NAV ===== */
         .bottom-nav {
             flex-shrink: 0;
             height: var(--nav-h);
@@ -574,7 +508,7 @@ $jumlah_stok_kritis = count($stok_kritis);
             color: var(--red);
         }
 
-        /* ===== 5. HOME INDICATOR — diam ===== */
+        /* ===== 5. HOME INDICATOR ===== */
         .home-indicator {
             flex-shrink: 0;
             background: #000;
@@ -599,6 +533,7 @@ $jumlah_stok_kritis = count($stok_kritis);
             letter-spacing: 2.5px;
             text-transform: uppercase;
         }
+
     </style>
 </head>
 
@@ -606,14 +541,13 @@ $jumlah_stok_kritis = count($stok_kritis);
 
     <div class="android-device">
 
-        <!-- Physical Buttons -->
         <div class="btn-power"></div>
         <div class="btn-vol-up"></div>
         <div class="btn-vol-down"></div>
 
         <div class="screen-bezel">
 
-            <!-- ① STATUS BAR — diam -->
+            <!-- STATUS BAR -->
             <div class="status-bar">
                 <div class="punch-hole"></div>
                 <span class="status-time">09:41</span>
@@ -638,7 +572,7 @@ $jumlah_stok_kritis = count($stok_kritis);
                 </div>
             </div>
 
-            <!-- ② TOPBAR — diam, logo & role selalu keliatan -->
+            <!-- TOPBAR -->
             <div class="topbar">
                 <div class="brand">
                     <div class="brand-logo">S²</div>
@@ -649,101 +583,133 @@ $jumlah_stok_kritis = count($stok_kritis);
                 </div>
             </div>
 
-            <!-- ③ APP SCREEN — satu-satunya bagian yang scroll -->
+            <!-- APP SCREEN -->
             <div class="app-screen">
 
-                <!-- STATS GRID -->
-                <div class="stats">
-                    <div class="stat-card gold">
-                        <div class="stat-label">Transaksi</div>
-                        <div class="stat-value">12 Transaksi</div>
+                <!-- Avatar & Nama -->
+                <div class="profile-hero">
+                    <div class="avatar-ring">
+                        <svg viewBox="0 0 24 24">
+                            <circle cx="12" cy="8" r="4" />
+                            <path d="M4 20v-1a8 8 0 0116 0v1" />
+                        </svg>
                     </div>
-                    <div class="stat-card teal">
-                        <div class="stat-label">Total Omzet</div>
-                        <div class="stat-value">Rp 1.250.000</div>
-                    </div>
-                    <div class="stat-card dark">
-                        <div class="stat-label">Total Stok</div>
-                        <div class="stat-value"><?= $totalStok ?> Pcs</div>
-                    </div>
-                    <div class="stat-card red">
-                        <div class="stat-label">Kategori</div>
-                        <div class="stat-value">8 Jenis</div>
+                    <div class="profile-name"><?= htmlspecialchars(strtoupper($nama)) ?></div>
+                    <div class="profile-role-badge">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+                            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        Crew
                     </div>
                 </div>
 
-                <div class="section-divider"></div>
+                <!-- Info Card -->
+                <div class="info-card">
 
-                <div class="section-header">
-                    <div class="warning-icon">⚠️</div>
-                    <h2>Peringatan Stok</h2>
-                    <div class="badge-count"><?= $jumlah_stok_kritis ?></div>
-                </div>
-
-                <div class="stock-list">
-                    <?php if ($jumlah_stok_kritis > 0): ?>
-                        <?php foreach ($stok_kritis as $item):
-                            $tag_class = $item['stok'] == 0 ? 'stok-empty' : 'stok-low';
-                            $tag_label = 'Stok: ' . $item['stok'];
-                        ?>
-                            <div class="stock-item">
-                                <div class="item-thumb">
-                                    <svg viewBox="0 0 24 24" stroke="#264653" fill="none" stroke-width="1.5">
-                                        <path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z" />
-                                    </svg>
-                                </div>
-                                <div class="item-info">
-                                    <div class="item-name"><?= htmlspecialchars($item['nama']) ?></div>
-                                    <div class="item-meta">
-                                        <span class="meta-tag rack">Harga: <?= htmlspecialchars($item['harga']) ?></span>
-                                        <span class="meta-tag <?= $tag_class ?>"><?= $tag_label ?></span>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <div style="text-align:center; padding: 20px; font-size:12px; font-weight:bold; color:var(--charcoal); opacity: 0.6;">
-                            Stok Terkendali! Tidak ada barang dengan stok di bawah 5.
+                    <!-- Nama -->
+                    <div class="info-row">
+                        <div class="info-icon">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="8" r="4" />
+                                <path d="M4 20v-1a8 8 0 0116 0v1" />
+                            </svg>
                         </div>
-                    <?php endif; ?>
-                </div>
+                        <div class="info-text">
+                            <div class="info-label">Nama Lengkap</div>
+                            <div class="info-value"><?= htmlspecialchars($nama) ?></div>
+                        </div>
+                    </div>
 
-            </div><!-- /app-screen ③ -->
+                    <!-- Email -->
+                    <div class="info-row">
+                        <div class="info-icon">
+                            <svg viewBox="0 0 24 24">
+                                <rect x="2" y="4" width="20" height="16" rx="2" />
+                                <path d="M2 7l10 7 10-7" />
+                            </svg>
+                        </div>
+                        <div class="info-text">
+                            <div class="info-label">Email</div>
+                            <div class="info-value"><?= htmlspecialchars($email) ?></div>
+                        </div>
+                    </div>
 
-            <!-- ④ BOTTOM NAV — diam -->
-            <nav class="bottom-nav">
-                <a href="dasboard_crew.php" class="nav-item active">
+                    <!-- Shift -->
+                    <div class="info-row">
+                        <div class="info-icon">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="9" />
+                                <path d="M12 7v5l3 3" />
+                            </svg>
+                        </div>
+                        <div class="info-text">
+                            <div class="info-label">Shift Kerja</div>
+                            <div>
+                                <?php if ($shift === 'Shift 1'): ?>
+                                    <span class="shift-badge shift-1">☀️ Shift 1 &nbsp;(08.00 – 15.00)</span>
+                                <?php elseif ($shift === 'Shift 2'): ?>
+                                    <span class="shift-badge shift-2">🌙 Shift 2 &nbsp;(15.00 – 22.00)</span>
+                                <?php else: ?>
+                                    <span class="shift-badge shift-default">— Belum diatur</span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Status -->
+                    <div class="info-row">
+                        <div class="info-icon">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M9 12l2 2 4-4" />
+                                <circle cx="12" cy="12" r="9" />
+                            </svg>
+                        </div>
+                        <div class="info-text">
+                            <div class="info-label">Status</div>
+                            <div class="status-aktif">
+                                <span class="status-dot"></span>
+                                <?= ucfirst(htmlspecialchars($status)) ?>
+                            </div>
+                        </div>
+                    </div>
+
+                </div><!-- /info-card -->
+
+                <!-- Logout Button -->
+                <a href="logout.php" class="logout-btn"
+                    onclick="return confirm('Yakin ingin logout?')">
                     <svg viewBox="0 0 24 24">
-                        <rect x="3" y="3" width="7" height="7" rx="1.5" />
-                        <rect x="14" y="3" width="7" height="7" rx="1.5" />
-                        <rect x="3" y="14" width="7" height="7" rx="1.5" />
-                        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
                     </svg>
+                    Logout
+                </a>
+
+            </div><!-- /app-screen -->
+
+            <!-- BOTTOM NAV -->
+                        <nav class="bottom-nav">
+                <a href="dasboard_crew.php" class="nav-item">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
                     <span>Dashboard</span>
                 </a>
                 <a href="stok_crew.php" class="nav-item">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M5 8h14M5 12h14M5 16h14" stroke-linecap="round" />
-                    </svg>
+                    <svg viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14" stroke-linecap="round" /></svg>
                     <span>Stok</span>
                 </a>
                 <a href="transaksi.php" class="nav-item">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke-linecap="round" stroke-linejoin="round" />
-                        <path d="M3 6h18M16 10a4 4 0 01-8 0" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
+                    <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke-linecap="round" stroke-linejoin="round" /><path d="M3 6h18M16 10a4 4 0 01-8 0" stroke-linecap="round" stroke-linejoin="round" /></svg>
                     <span>Transaksi</span>
                 </a>
-                <a href="profil_crew.php" class="nav-item">
-                    <svg viewBox="0 0 24 24">
-                        <circle cx="12" cy="7" r="4" />
-                        <path d="M2 21v-1a8 8 0 0116 0v1" stroke-linecap="round" />
-                    </svg>
+                <a href="profil_crew.php" class="nav-item active">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4" /><path d="M2 21v-1a8 8 0 0116 0v1" stroke-linecap="round" /></svg>
                     <span>User</span>
                 </a>
             </nav>
 
-            <!-- ⑤ HOME INDICATOR — diam -->
+            <!-- HOME INDICATOR -->
             <div class="home-indicator">
                 <div class="home-bar"></div>
             </div>
@@ -754,6 +720,5 @@ $jumlah_stok_kritis = count($stok_kritis);
     <div class="device-label">Solo Second Thrift &middot; Android Preview</div>
 
 </body>
-
 
 </html>

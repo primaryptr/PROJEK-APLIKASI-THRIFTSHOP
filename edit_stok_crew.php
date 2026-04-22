@@ -8,105 +8,67 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] != 'crew') {
     exit();
 }
 
-$success = false;
-$errorMsg = '';
-
-// Load data barang untuk JS autocalculate
-$productsData = [];
-$mapToDbId = [];
-
-$query = "SELECT * FROM barang ORDER BY id_barang DESC";
-$result = mysqli_query($conn, $query);
-
-if ($result) {
-    while ($row = mysqli_fetch_assoc($result)) {
-        $tipe = strtolower($row['tipe']);
-        if ($tipe == 'brand') {
-            $kode_tipe = 'B';
-        } else {
-            $kode_tipe = 'NB';
-        }
-
-        $kategori_kodes = [
-            'KAOS/POLO' => 'KOS',
-            'KEMEJA/FLANEL' => 'KMJ',
-            'HOODIE/CN' => 'HOD',
-            'JAKET/AIRISM' => 'JKT',
-            'JAS/BLAZER' => 'JAS',
-            'RAJUT/CROP' => 'RJT',
-            'CHINOS' => 'CHN',
-            'JEANS' => 'JNS',
-            'CELANA PENDEK' => 'CPD',
-            'TRAINING' => 'TRN',
-            'CELANA KANTOR' => 'CKN'
-        ];
-        $kat = strtoupper($row['kategori']);
-        $kode_kat = isset($kategori_kodes[$kat]) ? $kategori_kodes[$kat] : 'BRG';
-        $kode_sku = $kode_tipe . '-' . $kode_kat . '-' . str_pad($row['id_barang'], 3, '0', STR_PAD_LEFT);
-
-        $cleanSku = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($kode_sku));
-
-        $productsData[] = [
-            'sku' => $kode_sku,
-            'cleanSku' => $cleanSku,
-            'title' => strtoupper($row['nama_barang']),
-            'price' => (int)$row['harga'],
-            'stock' => (int)$row['stok'],
-            'db_id' => $row['id_barang']
-        ];
-        $mapToDbId[$cleanSku] = $row;
-    }
+// Get product ID from URL
+if (!isset($_GET['id'])) {
+    header("Location: stok_crew.php");
+    exit();
 }
 
+$id_barang = (int)$_GET['id'];
+$product = null;
+$success = false;
+$error = false;
+
+// Fetch product data
+$query = "SELECT * FROM barang WHERE id_barang = $id_barang";
+$result = mysqli_query($conn, $query);
+
+if ($result && mysqli_num_rows($result) > 0) {
+    $product = mysqli_fetch_assoc($result);
+} else {
+    header("Location: stok_crew.php");
+    exit();
+}
+
+// Handle Update
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $kode_input = $_POST['kode_barang'];
-    $qty = (int)$_POST['qty'];
+    $nama_barang = $_POST['nama_barang'];
+    $kategori = $_POST['kategori'];
+    $harga = (int)$_POST['harga'];
+    $stok = (int)$_POST['stok'];
+    $barang_rusak = (int)$_POST['barang_rusak'];
 
-    $clean_input = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($kode_input));
-    $numeric_input = (int)preg_replace('/[^0-9]/', '', $kode_input);
-    $barang = null;
+    $foto = $product['foto']; // Keep existing photo by default
 
-    if (isset($mapToDbId[$clean_input])) {
-        $barang = $mapToDbId[$clean_input];
-    } else if ($numeric_input > 0) {
-        foreach ($mapToDbId as $sku => $data) {
-            if ($data['id_barang'] == $numeric_input) {
-                $barang = $data;
-                break;
-            }
+    // Proses Upload Foto
+    if (isset($_FILES['foto']) && $_FILES['foto']['error'] == 0) {
+        $upload_dir = 'uploads/';
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0777, true);
+        }
+
+        // Delete old photo if exists
+        if (!empty($product['foto']) && file_exists($upload_dir . $product['foto'])) {
+            unlink($upload_dir . $product['foto']);
+        }
+
+        $filename = time() . '_' . preg_replace('/[^a-zA-Z0-9.\-_]/', '', $_FILES['foto']['name']);
+        $path = $upload_dir . $filename;
+        if (move_uploaded_file($_FILES['foto']['tmp_name'], $path)) {
+            $foto = $filename;
         }
     }
 
-    if ($barang) {
-        if ($barang['stok'] >= $qty) {
-            $id_barang = $barang['id_barang'];
-            $total_harga = $barang['harga'] * $qty;
-
-            // Insert transaksi
-            $stmt = $conn->prepare("INSERT INTO transaksi (id_barang, qty, total_harga) VALUES (?, ?, ?)");
-            $stmt->bind_param("iii", $id_barang, $qty, $total_harga);
-            if ($stmt->execute()) {
-                // Update stok
-                $new_stok = $barang['stok'] - $qty;
-                $stmt2 = $conn->prepare("UPDATE barang SET stok = ? WHERE id_barang = ?");
-                $stmt2->bind_param("ii", $new_stok, $id_barang);
-                if ($stmt2->execute()) {
-                    $success = true;
-                    // Update fresh data js
-                    foreach ($productsData as &$pd) {
-                        if ($pd['db_id'] == $id_barang) {
-                            $pd['stock'] = $new_stok;
-                        }
-                    }
-                }
-            } else {
-                $errorMsg = 'Gagal menyimpan transaksi!';
-            }
-        } else {
-            $errorMsg = 'Stok tidak mencukupi untuk jumlah transaksi ini!';
-        }
+    $stmt = $conn->prepare("UPDATE barang SET nama_barang = ?, kategori = ?, harga = ?, stok = ?, barang_rusak = ?, foto = ? WHERE id_barang = ?");
+    $stmt->bind_param("ssiissi", $nama_barang, $kategori, $harga, $stok, $barang_rusak, $foto, $id_barang);
+    if ($stmt->execute()) {
+        $success = true;
+        // Refresh product data
+        $query = "SELECT * FROM barang WHERE id_barang = $id_barang";
+        $result = mysqli_query($conn, $query);
+        $product = mysqli_fetch_assoc($result);
     } else {
-        $errorMsg = 'Kode barang tidak ditemukan di sistem!';
+        $error = true;
     }
 }
 ?>
@@ -116,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Solo Second Thrift - Transaksi</title>
+    <title>Solo Second Thrift - Edit Stok</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <style>
                 :root {
@@ -336,36 +298,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         .page-title {
             text-align: center;
-            font-size: 20px;
+            font-size: 16px;
             font-weight: 800;
             color: var(--charcoal);
             margin: 16px 0 20px;
             letter-spacing: 0.5px;
             text-transform: uppercase;
-            text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.1);
-        }
-
-        .transaksi-card {
-            background: white;
-            margin: 0 16px 40px;
-            border-radius: 20px;
-            padding: 20px 16px;
-            box-shadow: 4px 4px 0px var(--charcoal);
-            border: 2px solid var(--charcoal);
         }
 
         .form-group {
-            padding: 0 0 16px;
+            padding: 0 16px 12px;
         }
 
         .form-label {
             font-size: 11px;
             font-weight: 800;
             color: var(--charcoal);
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             display: block;
-            text-transform: uppercase;
-            opacity: 0.7;
         }
 
         .form-input {
@@ -395,6 +345,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             font-weight: 600;
         }
 
+        select.form-input {
+            appearance: none;
+        }
+
         input[type=number]::-webkit-inner-spin-button,
         input[type=number]::-webkit-outer-spin-button {
             -webkit-appearance: none;
@@ -405,47 +359,66 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             -moz-appearance: textfield;
         }
 
-        .totals-section {
-            margin-top: 10px;
-            padding-top: 16px;
-            border-top: 2px dashed rgba(38, 70, 83, 0.2);
+        .photo-upload {
+            background: white;
+            border: 2px dashed var(--charcoal);
+            border-radius: 14px;
+            height: 120px;
             display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .totals-row {
-            display: flex;
-            justify-content: space-between;
             align-items: center;
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--charcoal);
-            opacity: 0.8;
+            justify-content: center;
+            margin: 0 16px 16px;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
         }
 
-        .totals-row.total-bayar {
-            font-size: 15px;
-            font-weight: 800;
-            text-transform: uppercase;
-            opacity: 1;
+        .photo-upload input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 10;
+            pointer-events: auto;
+        }
+
+        .photo-upload svg {
+            width: 40px;
+            height: 40px;
+            stroke: var(--charcoal);
+            opacity: 0.5;
+            fill: none;
+            stroke-width: 2;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        #preview-img {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+            z-index: 2;
+            border-radius: 12px;
         }
 
         .btn-submit {
-            background: var(--green);
+            background: var(--red);
             color: white;
-            font-size: 13px;
+            font-size: 14px;
             font-weight: 800;
-            letter-spacing: 0.5px;
             padding: 14px;
             border-radius: 14px;
             border: 2px solid var(--charcoal);
             box-shadow: 3px 3px 0 var(--charcoal);
             cursor: pointer;
-            width: 100%;
-            margin: 24px 0 0;
+            width: calc(100% - 32px);
+            margin: 10px 16px 40px;
             transition: transform 0.1s, box-shadow 0.1s;
-            display: block;
         }
 
         .btn-submit:active {
@@ -470,8 +443,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             display: flex;
             align-items: center;
             gap: 8px;
-            animation: slideDown 0.5s ease out, fadeOut 0.5s ease 2.5s forwards;
-            pointer-events: none;
+            animation: slideDown 0.5s ease out, fadeOut 0.5s ease 3s forwards;
+            pointer-events: auto;
+            cursor: pointer;
         }
 
         @keyframes slideDown {
@@ -627,6 +601,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             <div class="topbar">
                 <div class="brand">
+                    <button class="back-btn" onclick="window.location.href='stok_crew.php'">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M15 18l-6-6 6-6" />
+                        </svg>
+                    </button>
                     <div class="brand-logo">S²</div>
                     <div class="brand-text">
                         <h1>SOLO SECOND THRIFT</h1>
@@ -641,49 +620,62 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
                             <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
-                        Transaksi tersimpan!
+                        Barang diperbarui!
                     </div>
                 <?php endif; ?>
-                <?php if (!empty($errorMsg)): ?>
-                    <div class="notification" style="background: var(--red);">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
+
+                <div class="page-title">EDIT STOK BARANG</div>
+
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="photo-upload" id="photo-container">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                            <circle cx="12" cy="13" r="4"></circle>
                         </svg>
-                        <?= $errorMsg ?>
+                        <img id="preview-img" src="" alt="Preview">
+                        <input type="file" name="foto" id="foto" accept="image/*" onchange="previewFile()">
                     </div>
-                <?php endif; ?>
 
-                <div class="page-title">PENJUALAN</div>
-                <div style="padding: 0 16px; font-weight: 800; font-size: 14px; margin-bottom: 12px; color: var(--charcoal);">Input Transaksi</div>
+                    <div class="form-group">
+                        <label class="form-label">Nama Barang</label>
+                        <input type="text" name="nama_barang" class="form-input" placeholder="Ubah nama barang" value="<?php echo htmlspecialchars($product['nama_barang']); ?>" required>
+                    </div>
 
-                <div class="transaksi-card">
-                    <form method="POST">
-                        <div class="form-group">
-                            <label class="form-label">Scan/ Kode Barang</label>
-                            <input type="text" id="kode_barang" name="kode_barang" class="form-input" placeholder="Contoh : NB-KOS-012" required autocomplete="off">
-                            <div id="product-hint" style="font-size:10px; font-weight:700; color:var(--green); margin-top:6px; margin-left:4px; height:12px;"></div>
-                        </div>
+                    <div class="form-group">
+                        <label class="form-label">Kategori</label>
+                        <select name="kategori" class="form-input" required>
+                            <option value="CELANA PANJANG" <?php echo ($product['kategori'] == 'CELANA PANJANG') ? 'selected' : ''; ?>>Celana Panjang</option>
+                            <option value="KAOS/POLO" <?php echo ($product['kategori'] == 'KAOS/POLO') ? 'selected' : ''; ?>>Kaos / Polo</option>
+                            <option value="KEMEJA/FLANEL" <?php echo ($product['kategori'] == 'KEMEJA/FLANEL') ? 'selected' : ''; ?>>Kemeja / Flanel</option>
+                            <option value="HOODIE/CN" <?php echo ($product['kategori'] == 'HOODIE/CN') ? 'selected' : ''; ?>>Hoodie / CN</option>
+                            <option value="JAKET/AIRISM" <?php echo ($product['kategori'] == 'JAKET/AIRISM') ? 'selected' : ''; ?>>Jaket / Airism</option>
+                            <option value="JAS/BLAZER" <?php echo ($product['kategori'] == 'JAS/BLAZER') ? 'selected' : ''; ?>>Jas / Blazer</option>
+                            <option value="RAJUT/CROP" <?php echo ($product['kategori'] == 'RAJUT/CROP') ? 'selected' : ''; ?>>Rajut / Crop</option>
+                            <option value="CHINOS" <?php echo ($product['kategori'] == 'CHINOS') ? 'selected' : ''; ?>>Chinos</option>
+                            <option value="JEANS" <?php echo ($product['kategori'] == 'JEANS') ? 'selected' : ''; ?>>Jeans</option>
+                            <option value="CELANA PENDEK" <?php echo ($product['kategori'] == 'CELANA PENDEK') ? 'selected' : ''; ?>>Celana Pendek</option>
+                            <option value="TRAINING" <?php echo ($product['kategori'] == 'TRAINING') ? 'selected' : ''; ?>>Training</option>
+                            <option value="CELANA KANTOR" <?php echo ($product['kategori'] == 'CELANA KANTOR') ? 'selected' : ''; ?>>Celana Kantor</option>
+                        </select>
+                    </div>
 
-                        <div class="form-group">
-                            <label class="form-label">Jumlah (Qty)</label>
-                            <input type="number" id="qty" name="qty" class="form-input" placeholder="Contoh : 1" value="1" required min="1">
-                        </div>
+                    <div class="form-group">
+                        <label class="form-label">Harga Jual</label>
+                        <input type="number" name="harga" class="form-input" placeholder="Ubah harga jual" value="<?php echo $product['harga']; ?>" required>
+                    </div>
 
-                        <div class="totals-section">
-                            <div class="totals-row">
-                                <span>Subtotal</span>
-                                <span id="subtotal_text" style="color: var(--charcoal); font-weight: 800;">Rp. 0</span>
-                            </div>
-                            <div class="totals-row total-bayar">
-                                <span>TOTAL BAYAR</span>
-                                <span id="total_bayar_text" style="color: var(--red);">Rp. 0</span>
-                            </div>
-                        </div>
+                    <div class="form-group">
+                        <label class="form-label">Stok</label>
+                        <input type="number" name="stok" class="form-input" placeholder="Ubah stok" value="<?php echo $product['stok']; ?>" required>
+                    </div>
 
-                        <button type="submit" class="btn-submit">SIMPAN & CETAK NOTA</button>
-                    </form>
-                </div>
+                    <div class="form-group">
+                        <label class="form-label">Jumlah Barang Rusak</label>
+                        <input type="number" name="barang_rusak" class="form-input" placeholder="0" value="<?php echo $product['barang_rusak']; ?>">
+                    </div>
+
+                    <button type="submit" class="btn-submit">EDIT</button>
+                </form>
 
             </div><!-- /app-screen -->
 
@@ -692,11 +684,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
                     <span>Dashboard</span>
                 </a>
-                <a href="stok_crew.php" class="nav-item">
+                <a href="stok_crew.php" class="nav-item active">
                     <svg viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14" stroke-linecap="round" /></svg>
                     <span>Stok</span>
                 </a>
-                <a href="transaksi.php" class="nav-item active">
+                <a href="transaksi.php" class="nav-item">
                     <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke-linecap="round" stroke-linejoin="round" /><path d="M3 6h18M16 10a4 4 0 01-8 0" stroke-linecap="round" stroke-linejoin="round" /></svg>
                     <span>Transaksi</span>
                 </a>
@@ -714,58 +706,67 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <div class="device-label">Solo Second Thrift &middot; Android Preview</div>
 
     <script>
-        const dbProducts = <?php echo json_encode($productsData); ?>;
+        // Show existing photo if available
+        function initPhoto() {
+            const photoContainer = document.getElementById('photo-container');
+            const preview = document.getElementById('preview-img');
+            const svgIcon = document.querySelector('.photo-upload svg');
 
-        const inputKode = document.getElementById('kode_barang');
-        const inputQty = document.getElementById('qty');
-        const textSubtotal = document.getElementById('subtotal_text');
-        const textTotal = document.getElementById('total_bayar_text');
-        const textHint = document.getElementById('product-hint');
+            <?php if (!empty($product['foto'])): ?>
+                const existingPhoto = 'uploads/<?php echo htmlspecialchars($product['foto']); ?>';
+                preview.src = existingPhoto;
+                preview.style.display = 'block';
+                svgIcon.style.opacity = '0';
+            <?php endif; ?>
 
-        function formatRupiah(angka) {
-            return 'Rp. ' + angka.toLocaleString('id-ID');
+            // Click handler untuk photo-upload
+            const photoContainer2 = document.getElementById('photo-container');
+            const fileInput = document.getElementById('foto');
+            photoContainer2.addEventListener('click', function() {
+                fileInput.click();
+            });
         }
 
-        function calculateTotal() {
-            const rawSku = inputKode.value.toLowerCase().replace(/[^a-z0-9]/g, '');
-            const rawNum = parseInt(inputKode.value.replace(/[^0-9]/g, '')) || 0;
-            const qty = parseInt(inputQty.value) || 0;
+        function previewFile() {
+            const preview = document.getElementById('preview-img');
+            const svgIcon = document.querySelector('.photo-upload svg');
+            const file = document.getElementById('foto').files[0];
+            const reader = new FileReader();
 
-            // Find product using smart search (exact SKU without dash, OR just the extracted ID number!)
-            const product = dbProducts.find(p => p.cleanSku === rawSku || p.db_id == rawNum);
+            reader.onloadend = function() {
+                preview.src = reader.result;
+                preview.style.display = 'block';
+                svgIcon.style.opacity = '0';
+            }
 
-            if (product) {
-                textHint.textContent = `🛒 ${product.title} (STOK: ${product.stock})`;
-                if (qty > product.stock) {
-                    textHint.style.color = 'var(--red)';
-                    textHint.textContent += ' - STOK TIDAK CUKUP!';
-                } else {
-                    textHint.style.color = 'var(--green)';
-                }
-
-                const total = product.price * qty;
-                textSubtotal.textContent = formatRupiah(total);
-                textTotal.textContent = formatRupiah(total);
+            if (file) {
+                reader.readAsDataURL(file);
             } else {
-                if (rawSku.length > 3) {
-                    textHint.textContent = `Kode barang tidak ditemukan!`;
-                    textHint.style.color = 'var(--red)';
-                } else {
-                    textHint.textContent = ``;
-                }
-                textSubtotal.textContent = 'Rp. 0';
-                textTotal.textContent = 'Rp. 0';
+                preview.src = "";
+                preview.style.display = 'none';
+                svgIcon.style.opacity = '0.5';
             }
         }
 
-        inputKode.addEventListener('input', calculateTotal);
-        inputQty.addEventListener('input', calculateTotal);
+        // Notification dismiss on click
+        function dismissNotification() {
+            const notification = document.querySelector('.notification');
+            if (notification) {
+                notification.style.animation = 'none';
+                notification.style.opacity = '0';
+                notification.style.visibility = 'hidden';
+            }
+        }
 
-        // Hide popup when tapping anywhere
-        document.body.addEventListener('click', () => {
-            document.querySelectorAll('.notification').forEach(n => {
-                n.style.display = 'none';
-            });
+        // Initialize on page load
+        initPhoto();
+
+        // Add click listener to notification
+        document.addEventListener('DOMContentLoaded', function() {
+            const notification = document.querySelector('.notification');
+            if (notification) {
+                notification.addEventListener('click', dismissNotification);
+            }
         });
     </script>
 </body>

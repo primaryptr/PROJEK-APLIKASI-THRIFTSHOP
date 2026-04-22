@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <title>Solo Second Thrift - Tambah Stok</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <style>
-        :root {
+                :root {
             --bg: #FDFCF0;
             --charcoal: #264653;
             --red: #B23A48;
@@ -64,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             padding: 0;
         }
 
+        /* ===== PAGE BACKGROUND ===== */
         body {
             background: #12121f;
             background-image:
@@ -78,6 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             font-family: 'Plus Jakarta Sans', sans-serif;
         }
 
+        /* ===== ANDROID FRAME ===== */
         .android-device {
             position: relative;
             width: 393px;
@@ -92,6 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 inset 0 2px 0 rgba(255, 255, 255, 0.1);
         }
 
+        /* Physical buttons */
         .btn-power {
             position: absolute;
             right: -5px;
@@ -122,16 +125,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             border-radius: 4px 0 0 4px;
         }
 
+        /* ===== SCREEN BEZEL ===== */
         .screen-bezel {
             background: #000;
             border-radius: 42px;
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            height: 780px;
-            position: relative;
+            height: 850px;
         }
 
+        /* ===== 1. STATUS BAR ===== */
         .status-bar {
             flex-shrink: 0;
             background: #000;
@@ -173,6 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             height: 13px;
         }
 
+        /* ===== 2. TOPBAR ===== */
         .topbar {
             flex-shrink: 0;
             background: var(--bg);
@@ -241,13 +246,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             fill: none;
         }
 
+        /* ===== 3. APP SCREEN ===== */
         .app-screen {
             flex: 1;
             background: var(--bg);
             overflow-y: auto;
             overflow-x: hidden;
             scrollbar-width: none;
-            position: relative;
+        }
+
+        .app-screen::-webkit-scrollbar {
+            display: none;
         }
 
         .app-screen::-webkit-scrollbar {
@@ -339,6 +348,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             height: 100%;
             opacity: 0;
             cursor: pointer;
+            z-index: 10;
+            pointer-events: auto;
         }
 
         .photo-upload svg {
@@ -399,8 +410,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             display: flex;
             align-items: center;
             gap: 8px;
-            animation: slideDown 0.5s ease out, fadeOut 0.5s ease 2.5s forwards;
-            pointer-events: none;
+            animation: slideDown 0.5s ease out, fadeOut 0.5s ease 3s forwards;
+            pointer-events: auto;
+            cursor: pointer;
         }
 
         @keyframes slideDown {
@@ -422,6 +434,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         }
 
+                /* ===== 4. BOTTOM NAV ===== */
         .bottom-nav {
             flex-shrink: 0;
             height: var(--nav-h);
@@ -429,17 +442,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             border-top: 2.5px solid var(--charcoal);
             display: flex;
             align-items: center;
-            justify-content: space-around;
-            padding: 0 6px;
+            justify-content: space-between;
+            padding: 0 4px;
         }
 
         .nav-item {
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
             gap: 3px;
             cursor: pointer;
-            padding: 6px 12px;
+            flex: 1;
+            padding: 6px 0;
             border-radius: 10px;
             text-decoration: none;
             transition: background 0.15s;
@@ -473,35 +488,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             color: var(--red);
         }
 
-        .nav-fab {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: var(--red);
-            border: 2.5px solid var(--charcoal);
-            box-shadow: 3px 3px 0 var(--charcoal);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            margin-top: -20px;
-            flex-shrink: 0;
-            transition: transform 0.15s, box-shadow 0.15s;
-        }
-
-        .nav-fab:active {
-            transform: translate(2px, 2px);
-            box-shadow: 1px 1px 0 var(--charcoal);
-        }
-
-        .nav-fab svg {
-            width: 21px;
-            height: 21px;
-            stroke: white;
-            fill: none;
-            stroke-width: 2.2;
-        }
-
+        /* ===== 5. HOME INDICATOR ===== */
         .home-indicator {
             flex-shrink: 0;
             background: #000;
@@ -518,6 +505,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             border-radius: 3px;
         }
 
+        /* ===== LABEL ===== */
         .device-label {
             margin-top: 18px;
             color: rgba(255, 255, 255, 0.22);
@@ -525,6 +513,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             letter-spacing: 2.5px;
             text-transform: uppercase;
         }
+
 
         .back-btn {
             background: none;
@@ -658,39 +647,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             </div><!-- /app-screen -->
 
-            <nav class="bottom-nav">
+                        <nav class="bottom-nav">
                 <a href="dasboard_crew.php" class="nav-item">
-                    <svg viewBox="0 0 24 24">
-                        <rect x="3" y="3" width="7" height="7" rx="1.5" />
-                        <rect x="14" y="3" width="7" height="7" rx="1.5" />
-                        <rect x="3" y="14" width="7" height="7" rx="1.5" />
-                        <rect x="14" y="14" width="7" height="7" rx="1.5" />
-                    </svg>
+                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
                     <span>Dashboard</span>
                 </a>
                 <a href="stok_crew.php" class="nav-item active">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M5 8h14M5 12h14M5 16h14" stroke-linecap="round" />
-                    </svg>
+                    <svg viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14" stroke-linecap="round" /></svg>
                     <span>Stok</span>
                 </a>
-                <div class="nav-fab" onclick="window.location='transaksi.php'">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke-linecap="round" stroke-linejoin="round" />
-                        <path d="M3 6h18M16 10a4 4 0 01-8 0" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
-                </div>
-                <a href="laporan.php" class="nav-item">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M18 20V10M12 20V4M6 20v-6" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
-                    <span>Laporan</span>
+                <a href="transaksi.php" class="nav-item">
+                    <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke-linecap="round" stroke-linejoin="round" /><path d="M3 6h18M16 10a4 4 0 01-8 0" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                    <span>Transaksi</span>
                 </a>
-                <a href="profil.php" class="nav-item">
-                    <svg viewBox="0 0 24 24">
-                        <circle cx="12" cy="7" r="4" />
-                        <path d="M2 21v-1a8 8 0 0116 0v1" stroke-linecap="round" />
-                    </svg>
+                <a href="profil_crew.php" class="nav-item">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4" /><path d="M2 21v-1a8 8 0 0116 0v1" stroke-linecap="round" /></svg>
                     <span>User</span>
                 </a>
             </nav>
@@ -721,6 +692,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 preview.src = "";
                 preview.style.display = 'none';
                 svgIcon.style.opacity = '0.5';
+            }
+        }
+
+        // Click handler untuk photo-upload
+        document.addEventListener('DOMContentLoaded', function() {
+            const photoContainer = document.getElementById('photo-container');
+            const fileInput = document.getElementById('foto');
+            photoContainer.addEventListener('click', function() {
+                fileInput.click();
+            });
+
+            // Notification dismiss on click
+            const notification = document.querySelector('.notification');
+            if (notification) {
+                notification.addEventListener('click', dismissNotification);
+            }
+        });
+
+        // Notification dismiss on click
+        function dismissNotification() {
+            const notification = document.querySelector('.notification');
+            if (notification) {
+                notification.style.animation = 'none';
+                notification.style.opacity = '0';
+                notification.style.visibility = 'hidden';
             }
         }
     </script>
