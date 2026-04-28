@@ -1,411 +1,276 @@
 <?php
+// login.php
 session_start();
-require_once 'koneksi.php';
 
-// Logic verifikasi login ke database
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['login'])) {
-    $email = $_POST['email'];
-    $password = $_POST['password'];
-
-    $stmt = $conn->prepare("SELECT * FROM users WHERE email = ?");
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
-    $result = $stmt->get_result();
-
-    if ($result->num_rows > 0) {
-        $user = $result->fetch_assoc();
-        // Verifikasi password (support plain text untuk development, disarankan password_verify untuk produksi)
-        if (password_verify($password, $user['password']) || $password === $user['password']) {
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['id']      = $user['id']; // alias agar kompatibel semua halaman
-            $_SESSION['role']    = $user['role'];
-            $_SESSION['email']   = $user['email'];
-            $_SESSION['nama']    = isset($user['nama']) ? $user['nama'] : (isset($user['name']) ? $user['name'] : 'User');
-
-            if ($user['role'] == 'owner') {
-                header("Location: dasboard_owner.php");
-                exit();
-            } else if ($user['role'] == 'crew') {
-                header("Location: dasboard_crew.php");
-                exit();
-            } else if ($user['role'] == 'content_creator') {
-                header("Location: dasboard_creator.php");
-                exit();
-            } else {
-                echo "<script>alert('Role pengguna tidak dikenali!');</script>";
-            }
-        } else {
-            $error = "Password salah!";
-        }
+// Redirect based on role if already logged in
+if (isset($_SESSION['user_id'])) {
+    if ($_SESSION['user_role'] === 'owner') {
+        header("Location: owner_dashboard.php");
+        exit;
+    } else if ($_SESSION['user_role'] === 'crew') {
+        header("Location: dashboardcrew.php");
+        exit;
+    } else if ($_SESSION['user_role'] === 'content_creator') {
+        header("Location: dashboardcc.php");
+        exit;
     } else {
-        $error = "Email tidak ditemukan!";
+        header("Location: dashboard.php"); // Fallback for other roles
+        exit;
     }
 }
-?>
 
+$error_message = "";
+
+// Handle Login Submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
+    // Database connection using mysqli
+    $host = 'localhost';
+    $db   = 'thrift';
+    $user = 'root';
+    $pass = '';
+
+    $conn = new mysqli($host, $user, $pass, $db);
+
+    // Check connection
+    if ($conn->connect_error) {
+        die("Connection failed: " . $conn->connect_error);
+    }
+
+    $username = $conn->real_escape_string($_POST['username']);
+    $password = $conn->real_escape_string($_POST['password']); 
+
+    // Query to check user by email (used as username here) or name
+    // Adjusting based on thrift.sql `users` table which has `nama`, `email`, `password`, `role`
+    $sql = "SELECT id, nama, email, password, role, status FROM users WHERE (email = '$username' OR nama = '$username') AND status = 'aktif'";
+    $result = $conn->query($sql);
+
+    if ($result && $result->num_rows > 0) {
+        $user_data = $result->fetch_assoc();
+        
+        // Direct string comparison as the dummy data password '1111' is not hashed
+        if ($password === $user_data['password']) {
+            $_SESSION['user_id'] = $user_data['id'];
+            $_SESSION['user_name'] = $user_data['nama'];
+            $_SESSION['user_role'] = $user_data['role'];
+
+            // Redirect based on role
+            if ($user_data['role'] === 'owner') {
+                header("Location: owner_dashboard.php");
+            } else if ($user_data['role'] === 'crew') {
+                header("Location: dashboardcrew.php");
+            } else if ($user_data['role'] === 'content_creator') {
+                header("Location: dashboardcc.php");
+            } else {
+                header("Location: dashboard.php");
+            }
+            exit;
+        } else {
+            $error_message = "Password salah!";
+        }
+    } else {
+        $error_message = "Username tidak ditemukan atau akun tidak aktif!";
+    }
+
+    $conn->close();
+}
+?>
 <!DOCTYPE html>
 <html lang="id">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thrift Solo Second - Management System</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <title>Login - Solo Second</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            background-color: white;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
+        * {
             margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
         }
+        
+        body {
+    background: #12121f;
+    background-image:
+        radial-gradient(ellipse at 15% 50%, rgba(38, 70, 83, 0.45) 0%, transparent 55%),
+        radial-gradient(ellipse at 85% 15%, rgba(178, 58, 72, 0.25) 0%, transparent 50%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    font-family: 'Inter', sans-serif;
+}
 
-        /* Simulasi Frame Android */
-        .phone-container {
-            width: 100%;
-            max-width: 412px;
-            height: 844px;
-            background: #FDFCF0;
-            position: relative;
-            overflow: hidden;
-            border: 12px solid #202124;
-            border-radius: 3rem;
-            box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.2);
-        }
+        .phone-mockup {
+    position: relative;
+    width: 393px;
+    background: linear-gradient(160deg, #3a3a3a 0%, #1e1e1e 50%, #111 100%);
+    border-radius: 54px;
+    padding: 15px;
+    box-shadow:
+        0 0 0 1.5px #4a4a4a,
+        0 0 0 3px #1a1a1a,
+        6px 6px 0 4px #000,
+        0 40px 100px rgba(0, 0, 0, 0.85),
+        inset 0 2px 0 rgba(255, 255, 255, 0.1);
+}
 
-        .content-area {
-            height: calc(100% - 140px);
-            overflow-y: auto;
-            padding: 24px;
-            padding-bottom: 100px;
-        }
+.btn-power { position: absolute; right: -5px; top: 140px; width: 5px; height: 55px; background: linear-gradient(to right, #2a2a2a, #4a4a4a, #2a2a2a); border-radius: 0 4px 4px 0; }
+.btn-vol-up { position: absolute; left: -5px; top: 120px; width: 5px; height: 42px; background: linear-gradient(to left, #2a2a2a, #4a4a4a, #2a2a2a); border-radius: 4px 0 0 4px; }
+.btn-vol-down { position: absolute; left: -5px; top: 172px; width: 5px; height: 42px; background: linear-gradient(to left, #2a2a2a, #4a4a4a, #2a2a2a); border-radius: 4px 0 0 4px; }
 
-        .content-area::-webkit-scrollbar {
-            display: none;
-        }
+.screen-bezel { background: #FDFCF0; border-radius: 42px; overflow: hidden; display: flex; flex-direction: column; height: 780px; position: relative; } 
+.status-bar { flex-shrink: 0; background: #000; height: 34px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px 0 18px; position: relative; } 
+.punch-hole { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 12px; height: 12px; background: #000; border-radius: 50%; border: 2px solid #1c1c1c; box-shadow: 0 0 0 1px #0a0a0a; } 
+.status-time { font-size: 11px; font-weight: 700; color: #fff; } 
+.status-icons { display: flex; align-items: center; gap: 4px; } 
+.status-icons svg { width: 13px; height: 13px; } 
+.home-indicator { flex-shrink: 0; background: #000; height: 26px; display: flex; align-items: center; justify-content: center; } 
+.home-bar { width: 90px; height: 4px; background: #3a3a3a; border-radius: 3px; } 
+.device-label { margin-top: 18px; color: rgba(255, 255, 255, 0.22); font-size: 10px; letter-spacing: 2.5px; text-transform: uppercase; }
 
-        /* Bottom Nav Floating */
-        .bottom-nav {
-            position: absolute;
-            bottom: 24px;
-            left: 20px;
-            right: 20px;
-            height: 72px;
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(12px);
-            border: 1px solid #F1F3F4;
-            border-radius: 2rem;
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-            z-index: 50;
-        }
-
-        .nav-item {
+        .screen-content { flex: 1; padding: 130px 40px 40px 40px; display: flex; flex-direction: column; align-items: center; }
+.logo-container {
             display: flex;
             flex-direction: column;
             align-items: center;
-            color: #BDC1C6;
-            cursor: pointer;
-            transition: all 0.3s ease;
+            margin-bottom: 60px;
         }
-
-        .nav-item.active {
-            color: #1A73E8;
+        
+        .logo-icon {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 15px;
+            color: #388035; 
         }
-
-        .nav-item.active .icon-bg {
-            background-color: #E8F0FE;
-            border-radius: 12px;
-            padding: 6px 12px;
-        }
-
-        .nav-item span {
-            font-size: 9px;
+        
+        .logo-text {
+            color: #388035;
+            font-size: 34px;
             font-weight: 700;
-            text-transform: uppercase;
-            margin-top: 4px;
-            letter-spacing: 0.05em;
         }
 
-        /* Status Bar Simulation */
-        .status-bar {
-            height: 40px;
+        .form-container {
+            width: 100%;
+        }
+
+        .input-group {
+            margin-bottom: 25px;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px 30px 0;
-            font-size: 13px;
-            font-weight: 700;
-            color: #202124;
+            flex-direction: column;
         }
 
-        /* Animations */
-        .page-transition {
-            animation: slideUp 0.4s ease-out;
+        .input-group label {
+            color: #7A7067;
+            font-size: 16px;
+            margin-bottom: 10px;
+            font-weight: 500;
         }
 
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
+        .input-group input {
+            width: 100%;
+            padding: 16px 20px;
+            border: 1.5px solid #EBE7E1;
+            border-radius: 12px;
+            font-size: 16px;
+            color: #333;
+            outline: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+        }
+
+        .input-group input:focus {
+            border-color: #388035;
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 16px;
+            background-color: #388035;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background-color 0.3s ease;
+        }
+
+        .btn-login:hover {
+            background-color: #2c6529;
+        }
+
+        .forgot-password {
+            display: block;
+            text-align: center;
+            color: #388035;
+            text-decoration: none;
+            font-size: 15px;
+            font-weight: 600;
+            margin-top: 25px;
+        }
+
+        @media (max-width: 480px) {
+            .phone-mockup {
+                width: 100%;
+                height: 100vh;
+                border: none;
+                border-radius: 0;
+                padding-top: 80px;
             }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        /* Modal Custom */
-        #modal-overlay {
-            background: rgba(32, 33, 36, 0.4);
-            backdrop-filter: blur(4px);
         }
     </style>
 </head>
-
 <body>
 
-    <div class="phone-container" id="app">
-        <!-- Login Screen -->
-        <div id="login-page" class="h-full flex flex-col justify-center px-10">
-            <div class="text-center mb-10">
-                <div class="w-20 h-20 bg-[#1A73E8] rounded-[2rem] mx-auto flex items-center justify-center mb-6 shadow-xl shadow-blue-100">
-                    <i data-lucide="shopping-bag" class="text-white w-10 h-10"></i>
+    <div class="phone-mockup">
+    <!-- Physical Buttons -->
+    <div class="btn-power"></div>
+    <div class="btn-vol-up"></div>
+    <div class="btn-vol-down"></div>
+    <div class="screen-bezel">
+        <div class="status-bar"><div class="punch-hole"></div><span class="status-time">09:41</span><div class="status-icons"><svg viewBox="0 0 16 12" fill="white"><rect x="0" y="8" width="3" height="4" rx="0.5" /><rect x="4" y="5" width="3" height="7" rx="0.5" /><rect x="8" y="2" width="3" height="10" rx="0.5" /><rect x="12" y="0" width="3" height="12" rx="0.5" /></svg><svg viewBox="0 0 16 12" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round"><path d="M1 4.5C3.8 1.9 7 .5 8 .5s4.2 1.4 7 4" /><path d="M3 7C4.8 5.3 6.5 4.5 8 4.5S11.2 5.3 13 7" /><path d="M5.5 9.5C6.5 8.6 7.3 8 8 8s1.5.6 2.5 1.5" /><circle cx="8" cy="11.5" r="0.8" fill="white" /></svg><svg viewBox="0 0 20 12" fill="none"><rect x="0.5" y="0.5" width="16" height="11" rx="2" stroke="white" stroke-width="1.2" /><rect x="2" y="2" width="11" height="8" rx="1" fill="white" /><path d="M17.5 4v4" stroke="white" stroke-width="1.5" stroke-linecap="round" /></svg></div></div><div class="screen-content">
+            <div class="logo-container">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M20.7 5.4l-4.2-2c-.3-.1-.6-.2-.9-.2H15c-.4 1.7-2 3-3.9 3S7.5 4.9 7.1 3.2H6.4c-.3 0-.6.1-.9.2l-4.2 2c-.6.3-.9 1-.7 1.6l1.2 3.6c.2.5.7.8 1.2.8h1v10.3c0 .8.6 1.4 1.4 1.4h11c.8 0 1.4-.6 1.4-1.4V11.5h1c.5 0 1-.3 1.2-.8l1.2-3.6c.2-.6-.1-1.3-.7-1.6z"/>
+                    </svg>
                 </div>
-                <h1 class="text-3xl font-bold text-[#202124]">Solo Second</h1>
-                <p class="text-[#5F6368] text-sm mt-1">Management System</p>
+                <h1 class="logo-text">Solo Second</h1>
             </div>
-            <form id="login-form" method="POST" action="" class="space-y-4">
-                <?php if (isset($error)): ?>
-                    <div class="bg-red-100 text-red-600 p-3 rounded-xl text-sm font-medium text-center">
-                        <?php echo $error; ?>
-                    </div>
-                <?php endif; ?>
-                <div class="relative">
-                    <i data-lucide="mail" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#5F6368]"></i>
-                    <input type="email" name="email" id="email" placeholder="Email" class="w-full pl-12 pr-6 py-4 bg-[#F1F3F4] rounded-2xl outline-none focus:ring-2 ring-[#1A73E8] font-medium" required>
+
+            <?php if (!empty($error_message)): ?>
+                <div style="color: #b91c1c; background-color: #fee2e2; padding: 10px; border-radius: 8px; margin-bottom: 20px; text-align: center; font-size: 14px; font-weight: 500;">
+                    <?php echo $error_message; ?>
                 </div>
-                <div class="relative">
-                    <i data-lucide="lock" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#5F6368]"></i>
-                    <input type="password" name="password" id="password" placeholder="Password" class="w-full pl-12 pr-6 py-4 bg-[#F1F3F4] rounded-2xl outline-none focus:ring-2 ring-[#1A73E8] font-medium" required>
+            <?php endif; ?>
+
+            <form class="form-container" action="login.php" method="POST">
+                <div class="input-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" placeholder="admin_solo" required>
                 </div>
-                <button type="submit" name="login" class="w-full bg-[#1A73E8] text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-100 active:scale-95 transition-all">Masuk</button>
+                
+                <div class="input-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="........" required>
+                </div>
+
+                <button type="submit" class="btn-login" name="login">Masuk</button>
+                
+                <a href="forgot.php" class="forgot-password">Lupa Password?</a>
             </form>
         </div>
-
-        <!-- Main App Layout (Hidden Initially) -->
-        <div id="main-layout" class="h-full hidden">
-            <div class="status-bar">
-                <span>10:45</span>
-                <div class="flex gap-2">
-                    <i data-lucide="signal" class="w-4 h-4"></i>
-                    <i data-lucide="battery" class="w-4 h-4"></i>
-                </div>
-            </div>
-
-            <div class="content-area" id="content-container">
-                <!-- Content will be injected here via JS -->
-            </div>
-
-            <nav class="bottom-nav">
-                <div class="nav-item active" onclick="navigate('home')">
-                    <div class="icon-bg"><i data-lucide="layout-dashboard" class="w-6 h-6"></i></div>
-                    <span>Home</span>
-                </div>
-                <div class="nav-item" onclick="navigate('stok')">
-                    <div class="icon-bg"><i data-lucide="package" class="w-6 h-6"></i></div>
-                    <span>Stok</span>
-                </div>
-                <div class="nav-item" onclick="navigate('transaksi')">
-                    <div class="icon-bg"><i data-lucide="shopping-cart" class="w-6 h-6"></i></div>
-                    <span>Trans</span>
-                </div>
-                <div class="nav-item" onclick="navigate('user')">
-                    <div class="icon-bg"><i data-lucide="users" class="w-6 h-6"></i></div>
-                    <span>User</span>
-                </div>
-            </nav>
-
-            <!-- Floating Action Button -->
-            <button id="fab" class="hidden absolute bottom-28 right-8 w-14 h-14 bg-[#1A73E8] text-white rounded-2xl flex items-center justify-center shadow-2xl border-4 border-white active:scale-90 transition-all z-40" onclick="openModal()">
-                <i data-lucide="plus" class="w-8 h-8"></i>
-            </button>
-        </div>
-
-        <!-- Modal Form -->
-        <div id="modal-overlay" class="hidden absolute inset-0 z-[100] flex items-end">
-            <div class="w-full bg-white rounded-t-[3rem] p-8 page-transition shadow-2xl">
-                <div class="w-12 h-1.5 bg-[#F1F3F4] rounded-full mx-auto mb-6"></div>
-                <div class="flex justify-between items-center mb-6">
-                    <h3 class="text-xl font-bold text-[#202124]">Input Data Baru</h3>
-                    <button onclick="closeModal()" class="p-2 bg-[#F8F9FA] rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button>
-                </div>
-                <div class="space-y-4">
-                    <input type="text" id="item-name" placeholder="Nama Produk / Staff" class="w-full p-4 bg-[#F1F3F4] rounded-2xl outline-none font-medium">
-                    <div class="grid grid-cols-2 gap-3">
-                        <input type="text" id="item-cat" placeholder="Kategori" class="p-4 bg-[#F1F3F4] rounded-2xl outline-none font-medium">
-                        <input type="number" id="item-stock" placeholder="Jumlah" class="p-4 bg-[#F1F3F4] rounded-2xl outline-none font-medium">
-                    </div>
-                    <button onclick="saveData()" class="w-full bg-[#1A73E8] text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-50 mt-4">Simpan Data</button>
-                </div>
-                <div class="h-8"></div>
-            </div>
+        <div class="home-indicator">
+            <div class="home-bar"></div>
         </div>
     </div>
+    </div>
 
-    <script>
-        // Initialize Lucide Icons
-        lucide.createIcons();
-
-        // App State
-        let currentUser = null;
-        let products = JSON.parse(localStorage.getItem('thrift_products')) || [{
-                id: 'TFT-01',
-                name: 'Crewneck Vintage',
-                cat: 'Atasan',
-                stock: 12,
-                price: '150k'
-            },
-            {
-                id: 'TFT-02',
-                name: 'Denim Pants Levis',
-                cat: 'Bawahan',
-                stock: 4,
-                price: '250k'
-            }
-        ];
-
-        // Navigation Logic
-        function navigate(page) {
-            const container = document.getElementById('content-container');
-            const fab = document.getElementById('fab');
-
-            // Update Nav UI
-            document.querySelectorAll('.nav-item').forEach(item => {
-                item.classList.remove('active');
-                if (item.innerText.toLowerCase().includes(page.slice(0, 3))) item.classList.add('active');
-            });
-
-            // Show/Hide FAB
-            if (page === 'stok' || page === 'user') fab.classList.remove('hidden');
-            else fab.classList.add('hidden');
-
-            // Render Page
-            let html = `<div class="page-transition">`;
-
-            if (page === 'home') {
-                html += `
-                <div class="flex justify-between items-center mb-8">
-                    <div>
-                        <h2 class="text-2xl font-bold text-[#202124]">Dashboard</h2>
-                        <p class="text-[#5F6368] text-sm">Halo, ${currentUser}!</p>
-                    </div>
-                    <div class="w-12 h-12 bg-white rounded-2xl border flex items-center justify-center"><i data-lucide="bell" class="w-5 h-5"></i></div>
-                </div>
-                <div class="bg-[#1A73E8] p-7 rounded-[2.5rem] text-white shadow-xl mb-6">
-                    <p class="text-[10px] font-bold uppercase tracking-widest opacity-80">Total Omzet Hari Ini</p>
-                    <h3 class="text-3xl font-bold mt-1">Rp 1.450.000</h3>
-                    <div class="mt-4 inline-block bg-white/20 px-3 py-1 rounded-full text-[10px] font-bold">+5% target</div>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="bg-white p-5 rounded-[2rem] border">
-                        <div class="w-10 h-10 bg-[#E8F0FE] rounded-xl flex items-center justify-center text-[#1A73E8] mb-4"><i data-lucide="shopping-cart" class="w-5 h-5"></i></div>
-                        <p class="text-[10px] font-bold text-[#5F6368] uppercase">Terjual</p>
-                        <h4 class="text-xl font-bold">24 Item</h4>
-                    </div>
-                    <div class="bg-white p-5 rounded-[2rem] border">
-                        <div class="w-10 h-10 bg-[#FEF7E0] rounded-xl flex items-center justify-center text-[#F9AB00] mb-4"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div>
-                        <p class="text-[10px] font-bold text-[#5F6368] uppercase">Stok Habis</p>
-                        <h4 class="text-xl font-bold">3 Produk</h4>
-                    </div>
-                </div>
-            `;
-            } else if (page === 'stok') {
-                html += `
-                <h2 class="text-2xl font-bold mb-6">Inventaris Barang</h2>
-                <div class="space-y-3">
-                    ${products.map(p => `
-                        <div class="bg-white p-4 rounded-3xl border flex items-center gap-4">
-                            <div class="w-12 h-12 rounded-2xl flex items-center justify-center ${p.stock < 5 ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'}"><i data-lucide="package" class="w-6 h-6"></i></div>
-                            <div class="flex-1">
-                                <h4 class="font-bold text-sm">${p.name}</h4>
-                                <p class="text-[10px] text-gray-500 uppercase">${p.cat} • ${p.price}</p>
-                            </div>
-                            <div class="text-right"><p class="font-bold">${p.stock}</p><p class="text-[9px] text-gray-400">UNIT</p></div>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-            } else if (page === 'transaksi') {
-                html += `
-                <h2 class="text-2xl font-bold mb-6">Transaksi</h2>
-                <div class="bg-white p-6 rounded-[2rem] border text-center py-12">
-                    <i data-lucide="receipt" class="w-12 h-12 mx-auto text-gray-300 mb-4"></i>
-                    <p class="text-gray-500 font-medium">Belum ada transaksi hari ini</p>
-                </div>
-            `;
-            } else if (page === 'user') {
-                html += `
-                <h2 class="text-2xl font-bold mb-6">Tim & Staff</h2>
-                <div class="space-y-3">
-                    <div class="bg-white p-4 rounded-3xl border flex items-center gap-4">
-                        <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center"><i data-lucide="user" class="w-6 h-6"></i></div>
-                        <div><h4 class="font-bold">Nabiel</h4><p class="text-xs text-blue-500 font-bold uppercase">Owner</p></div>
-                    </div>
-                    <div class="bg-white p-4 rounded-3xl border flex items-center gap-4">
-                        <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center"><i data-lucide="user" class="w-6 h-6"></i></div>
-                        <div><h4 class="font-bold">Siti</h4><p class="text-xs text-green-500 font-bold uppercase">Crew / Kasir</p></div>
-                    </div>
-                </div>
-            `;
-            }
-
-            html += `</div>`;
-            container.innerHTML = html;
-            lucide.createIcons();
-        }
-
-        // Modal Operations
-        function openModal() {
-            document.getElementById('modal-overlay').classList.remove('hidden');
-        }
-
-        function closeModal() {
-            document.getElementById('modal-overlay').classList.add('hidden');
-        }
-
-        function saveData() {
-            const name = document.getElementById('item-name').value;
-            const cat = document.getElementById('item-cat').value;
-            const stock = document.getElementById('item-stock').value;
-
-            if (name && stock) {
-                products.unshift({
-                    id: 'TFT-' + Math.floor(Math.random() * 100),
-                    name,
-                    cat: cat || 'Umum',
-                    stock: parseInt(stock),
-                    price: 'N/A'
-                });
-                localStorage.setItem('thrift_products', JSON.stringify(products));
-                closeModal();
-                navigate('stok');
-
-                // Clear inputs
-                document.getElementById('item-name').value = '';
-                document.getElementById('item-cat').value = '';
-                document.getElementById('item-stock').value = '';
-            }
-        }
-    </script>
-
+    <div class="device-label">Solo Second Thrift &middot; Android Preview</div>
+    <div class="device-label">Solo Second Thrift &middot; Android Preview</div>
 </body>
-
 </html>

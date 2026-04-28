@@ -20,27 +20,47 @@ if (empty($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'owner') {
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background: #d7d5ca;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
+    background: #12121f;
+    background-image:
+        radial-gradient(ellipse at 15% 50%, rgba(38, 70, 83, 0.45) 0%, transparent 55%),
+        radial-gradient(ellipse at 85% 15%, rgba(178, 58, 72, 0.25) 0%, transparent 50%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    font-family: 'Inter', sans-serif;
+}
 
         /* ── Phone shell ── */
         .phone {
-            width: 430px;
-            height: 932px;
-            background: #FDFCF0;
-            border: 18px solid #3A3A3A;
-            border-radius: 55px;
-            overflow: hidden;
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 24px 60px rgba(0,0,0,0.35);
-        }
+    position: relative;
+    width: 393px;
+    background: linear-gradient(160deg, #3a3a3a 0%, #1e1e1e 50%, #111 100%);
+    border-radius: 54px;
+    padding: 15px;
+    box-shadow:
+        0 0 0 1.5px #4a4a4a,
+        0 0 0 3px #1a1a1a,
+        6px 6px 0 4px #000,
+        0 40px 100px rgba(0, 0, 0, 0.85),
+        inset 0 2px 0 rgba(255, 255, 255, 0.1);
+}
+
+.btn-power { position: absolute; right: -5px; top: 140px; width: 5px; height: 55px; background: linear-gradient(to right, #2a2a2a, #4a4a4a, #2a2a2a); border-radius: 0 4px 4px 0; }
+.btn-vol-up { position: absolute; left: -5px; top: 120px; width: 5px; height: 42px; background: linear-gradient(to left, #2a2a2a, #4a4a4a, #2a2a2a); border-radius: 4px 0 0 4px; }
+.btn-vol-down { position: absolute; left: -5px; top: 172px; width: 5px; height: 42px; background: linear-gradient(to left, #2a2a2a, #4a4a4a, #2a2a2a); border-radius: 4px 0 0 4px; }
+
+.screen-bezel {
+    background: #FDFCF0;
+    border-radius: 42px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 780px;
+    position: relative;
+}
 
         /* ── Status bar ── */
         .status-bar {
@@ -304,6 +324,11 @@ if (empty($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'owner') {
 <body>
 
 <div class="phone">
+    <!-- Physical Buttons -->
+    <div class="btn-power"></div>
+    <div class="btn-vol-up"></div>
+    <div class="btn-vol-down"></div>
+    <div class="screen-bezel">
 
     <!-- Status Bar -->
     <div class="status-bar">
@@ -487,7 +512,8 @@ if (empty($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'owner') {
         <div class="bottom-pill"></div>
     </div>
 
-</div><!-- /phone -->
+</div>
+    </div><!-- /phone -->
 
 </body>
 </html>
