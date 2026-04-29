@@ -76,8 +76,46 @@ $crews = $conn->query("SELECT * FROM users WHERE role IN ('crew', 'content_creat
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Secular+One&display=swap" rel="stylesheet">
     <style>
-        body { margin: 0; min-height: 100vh; display: flex; justify-content: center; align-items: center; background: #d7d5ca; font-family: 'Inter', sans-serif; }
-        .phone-mockup { width: 430px; height: 932px; background-color: #FDFCF0; border: 18px solid #3A3A3A; border-radius: 55px; position: relative; box-shadow: 0 30px 80px rgba(0,0,0,0.18); overflow: hidden; display: flex; flex-direction: column; }
+        body {
+    background: #12121f;
+    background-image:
+        radial-gradient(ellipse at 15% 50%, rgba(38, 70, 83, 0.45) 0%, transparent 55%),
+        radial-gradient(ellipse at 85% 15%, rgba(178, 58, 72, 0.25) 0%, transparent 50%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    font-family: 'Inter', sans-serif;
+}
+        .phone-mockup {
+    position: relative;
+    width: 393px;
+    background: linear-gradient(160deg, #3a3a3a 0%, #1e1e1e 50%, #111 100%);
+    border-radius: 54px;
+    padding: 15px;
+    box-shadow:
+        0 0 0 1.5px #4a4a4a,
+        0 0 0 3px #1a1a1a,
+        6px 6px 0 4px #000,
+        0 40px 100px rgba(0, 0, 0, 0.85),
+        inset 0 2px 0 rgba(255, 255, 255, 0.1);
+}
+
+.btn-power { position: absolute; right: -5px; top: 140px; width: 5px; height: 55px; background: linear-gradient(to right, #2a2a2a, #4a4a4a, #2a2a2a); border-radius: 0 4px 4px 0; }
+.btn-vol-up { position: absolute; left: -5px; top: 120px; width: 5px; height: 42px; background: linear-gradient(to left, #2a2a2a, #4a4a4a, #2a2a2a); border-radius: 4px 0 0 4px; }
+.btn-vol-down { position: absolute; left: -5px; top: 172px; width: 5px; height: 42px; background: linear-gradient(to left, #2a2a2a, #4a4a4a, #2a2a2a); border-radius: 4px 0 0 4px; }
+
+.screen-bezel {
+    background: #FDFCF0;
+    border-radius: 42px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 780px;
+    position: relative;
+}
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
@@ -101,6 +139,11 @@ $crews = $conn->query("SELECT * FROM users WHERE role IN ('crew', 'content_creat
 <body>
 
 <div class="phone-mockup">
+    <!-- Physical Buttons -->
+    <div class="btn-power"></div>
+    <div class="btn-vol-up"></div>
+    <div class="btn-vol-down"></div>
+    <div class="screen-bezel">
     <!-- Status Bar -->
     <div class="w-full h-[48px] flex-none z-20 flex justify-between items-center px-6">
         <span class="text-[13px] font-bold text-gray-800" id="clockDisplay">09:41</span>
@@ -256,6 +299,7 @@ $crews = $conn->query("SELECT * FROM users WHERE role IN ('crew', 'content_creat
         <div class="w-[120px] h-[5px] bg-[#101828] opacity-15 rounded-full"></div>
     </div>
 </div>
+    </div>
 
 <script>
     setInterval(() => {
